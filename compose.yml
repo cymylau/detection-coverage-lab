@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  edr-tester:
+    image: kalilinux/kali-linux-docker:latest
+    container_name: edr-test-lab
+    hostname: attacker-workstation
+    privileged: true
+    network_mode: bridge
+    
+    # Mount Docker socket - WARNING: Grants root-equivalent host access
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./test-scripts:/home/root/test-scripts
+      - ./results:/home/root/results
+      
+    # Working directory
+    working_dir: /home/root
+    
+    # Environment
+    environment:
+      - TZ=UTC
+      - DEBIAN_FRONTEND=noninteractive
+    
+    # Resource limits (optional - adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+          
+    # Health check (optional)
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    driver: bridge
