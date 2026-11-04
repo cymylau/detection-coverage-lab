@@ -1,41 +1,62 @@
 version: '3.8'
 
 services:
+  # Attacker workstation — runs the emulation chain (nmap -> IMDS -> base64 -> DNS exfil).
   edr-tester:
     image: kalilinux/kali-rolling
     container_name: edr-test-lab
     hostname: attacker-workstation
-    privileged: true
-    network_mode: bridge
-    
-    # Mount Docker socket - WARNING: Grants root-equivalent host access
+    # NET_ADMIN lets lab-setup.sh alias 169.254.169.254 onto loopback.
+    # (Full privileged mode is not required for this scenario.)
+    cap_add:
+      - NET_ADMIN
+    command: ["sleep", "infinity"]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./test-scripts:/home/root/test-scripts
+      - ./services:/home/root/services
       - ./results:/home/root/results
-      
-    # Working directory
     working_dir: /home/root
-    
-    # Environment
     environment:
       - TZ=UTC
       - DEBIAN_FRONTEND=noninteractive
-    
-    # Resource limits (optional - adjust as needed)
+      - METADATA_IP=169.254.169.254
+      - EXFIL_DOMAIN=exfil.lab
+      - DNS_SINK=dns-sink
+      - RESULTS_DIR=/home/root/results
+      - SERVICES_DIR=/home/root/services
+    networks:
+      - labnet
+    depends_on:
+      - dns-sink
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 2G
-          
-    # Health check (optional)
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "22"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+
+  # Local DNS sink — the "attacker-controlled nameserver" that receives exfil.
+  # Logs every query and reassembles the decoded payload into ./results.
+  dns-sink:
+    image: python:3.12-slim
+    container_name: edr-lab-dns-sink
+    hostname: dns-sink
+    command: ["python3", "/app/dns_sink.py"]
+    volumes:
+      - ./services:/app:ro
+      - ./results:/home/root/results
+    environment:
+      - DNS_BIND=0.0.0.0
+      - DNS_PORT=53
+      - EXFIL_DOMAIN=exfil.lab
+      - RESULTS_DIR=/home/root/results
+    networks:
+      - labnet
 
 networks:
-  default:
+  labnet:
     driver: bridge
+    # Default bridge keeps egress so apt can install tooling in the Kali box.
+    # Safety does not depend on network isolation: the credentials are decoys
+    # and the DNS exfil is addressed to the in-lab `dns-sink` by hostname, so
+    # no real data is staged and nothing is sent to an external resolver.
+    # To harden further, set `internal: true` AFTER tools are installed.
