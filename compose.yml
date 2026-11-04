@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   edr-tester:
-    image: kalilinux/kali-linux-docker:latest
+    image: kalilinux/kali-rolling
     container_name: edr-test-lab
     hostname: attacker-workstation
     privileged: true
