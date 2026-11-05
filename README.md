@@ -87,24 +87,26 @@ rationale. Scripts marked (overlay) need `compose.privileged.yml`.
 | Persistence | T1543.002 | Create or Modify System Process: Systemd Service | `simulate-persistence.sh` |
 | Persistence | T1546.004 | Event Triggered Execution: Unix Shell Configuration Modification | `simulate-persistence.sh` |
 | Privilege Escalation | T1548.001 | Abuse Elevation Control Mechanism: Setuid and Setgid Binaries | `simulate-host-recon.sh` |
+| Privilege Escalation | T1548.003 | Abuse Elevation Control Mechanism: Sudo and Sudo Caching | `simulate-ssh-audit-session.sh` |
 | Privilege Escalation | T1611 | Escape to Host | `simulate-docker-socket-escape.sh`, `simulate-privileged-container-abuse.sh` (overlay) |
 | Defense Evasion | T1036.003 | Masquerading: Rename System Utilities | `simulate-defense-evasion.sh` |
 | Defense Evasion | T1070.006 | Indicator Removal: Timestomp | `simulate-defense-evasion.sh` |
 | Defense Evasion | T1070.003 | Indicator Removal: Clear Command History | `simulate-defense-evasion.sh` |
 | Defense Evasion | T1562.008 | Impair Defenses: Disable Cloud Logs | `simulate-impair-logging.sh` |
 | Credential Access | T1552.004 | Unsecured Credentials: Private Keys | `simulate-credential-discovery.sh` |
-| Credential Access | T1552.001 | Unsecured Credentials: Credentials In Files | `simulate-credential-discovery.sh` |
+| Credential Access | T1552.001 | Unsecured Credentials: Credentials In Files | `simulate-credential-discovery.sh`, `simulate-ssh-audit-session.sh` |
 | Credential Access | T1555.003 | Credentials from Password Stores: Credentials from Web Browsers | `simulate-credential-discovery.sh` |
 | Credential Access | T1552.005 | Unsecured Credentials: Cloud Instance Metadata API | `simulate-metadata-exfil.sh` |
 | Credential Access | T1552.007 | Unsecured Credentials: Container API | `simulate-workload-identity-theft.sh`, `simulate-image-secret-discovery.sh` (overlay) |
 | Credential Access | T1528 | Steal Application Access Token | `simulate-workload-identity-theft.sh` |
+| Credential Access | T1003.008 | OS Credential Dumping: /etc/passwd and /etc/shadow | `simulate-ssh-audit-session.sh` |
 | Discovery | T1033 | System Owner/User Discovery | `simulate-host-recon.sh` |
 | Discovery | T1082 | System Information Discovery | `simulate-host-recon.sh` |
 | Discovery | T1087.001 | Account Discovery: Local Account | `simulate-host-recon.sh` |
 | Discovery | T1069.001 | Permission Groups Discovery: Local Groups | `simulate-host-recon.sh` |
 | Discovery | T1046 | Network Service Discovery | `simulate-metadata-exfil.sh`, `simulate-lateral-movement.sh` |
 | Discovery | T1613 | Container and Resource Discovery | `simulate-image-secret-discovery.sh` (overlay) |
-| Lateral Movement | T1021.004 | Remote Services: SSH | `simulate-lateral-movement.sh` |
+| Lateral Movement | T1021.004 | Remote Services: SSH | `simulate-lateral-movement.sh`, `simulate-ssh-audit-session.sh` |
 | Collection | T1119 | Automated Collection | `simulate-collection-staging.sh` |
 | Collection | T1560.001 | Archive Collected Data: Archive via Utility | `simulate-metadata-exfil.sh`, `simulate-collection-staging.sh` |
 | Command and Control | T1071.001 | Application Layer Protocol: Web Protocols | `simulate-c2-beacon.sh` |

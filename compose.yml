@@ -76,9 +76,13 @@ services:
     networks:
       - labnet
 
-  # Internal "second host" — target for lateral-movement emulation
-  # (simulate-lateral-movement.sh). Decoy account only, no real data,
-  # reachable only on the lab's internal bridge network.
+  # Internal "second host" — target for lateral-movement and SSH-audit-
+  # session emulation (simulate-lateral-movement.sh,
+  # simulate-ssh-audit-session.sh). Decoy account only, no real data,
+  # reachable only on the lab's internal bridge network. SUDO_ACCESS gives
+  # the decoy account passwordless sudo so the audit-session scenario has
+  # something real to show for `sudo -l` / `sudo cat /etc/shadow`, not
+  # just permission-denied noise.
   internal-host:
     image: lscr.io/linuxserver/openssh-server:latest
     container_name: edr-lab-internal-host
@@ -90,6 +94,7 @@ services:
       - PASSWORD_ACCESS=true
       - USER_NAME=decoyuser
       - USER_PASSWORD=LAB-DECOY-NOT-REAL-PASSWORD
+      - SUDO_ACCESS=true
     networks:
       - labnet
 
