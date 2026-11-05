@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Attacker workstation — runs the emulation chain (nmap -> IMDS -> base64 -> DNS exfil).
   edr-tester:
