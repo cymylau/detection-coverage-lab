@@ -1,5 +1,24 @@
 # Cloud & Container Detection Test Lab (EDR/CDR)
 
+```
+                               _.-"  "-._
+                          _.-"            "-._
+                     .-""                      ""-.
+                 .-"                                "-.
+    .--._    .-"                                       "-.    _.--.
+ .-"     "--"                 cymylau                       "--"     "-.
+(___________________________________________________________________)
+```
+
+*cymylau* is Welsh for "clouds".
+
+## Authorship
+
+The scenarios, scripts, and documentation in this repository were
+written by Claude (Anthropic), co-authored with human review and
+direction throughout. Treat it accordingly: review it before relying
+on it, the way you would any AI-authored code.
+
 A self-contained, lab-only environment for validating detection coverage
 against attacker behaviour targeting cloud and containerised platforms:
 the kind of telemetry a CDR (Cloud Detection & Response) solution is
@@ -139,13 +158,6 @@ docker compose down
 # or, if you brought up the privileged overlay:
 docker compose -f compose.yml -f compose.privileged.yml down
 ```
-
-## Authorship
-
-The scenarios, scripts, and documentation in this repository were
-written by Claude (Anthropic), co-authored with human review and
-direction throughout. Treat it accordingly: review it before relying
-on it, the way you would any AI-authored code.
 
 ## License
 
