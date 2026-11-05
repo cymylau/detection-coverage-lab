@@ -139,3 +139,14 @@ docker compose down
 # or, if you brought up the privileged overlay:
 docker compose -f compose.yml -f compose.privileged.yml down
 ```
+
+## Authorship
+
+The scenarios, scripts, and documentation in this repository were
+written by Claude (Anthropic), co-authored with human review and
+direction throughout. Treat it accordingly: review it before relying
+on it, the way you would any AI-authored code.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
