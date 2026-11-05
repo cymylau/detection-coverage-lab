@@ -1,19 +1,16 @@
-# compose.privileged.yml — OPT-IN overlay for container-escape scenarios.
+# compose.privileged.yml - overlay adding the container-escape scenarios.
 #
-# Adds a disposable, fully isolated Docker-in-Docker "sandbox" daemon and
-# points edr-tester's Docker client at it, plus the extra Linux capability
-# the privileged-container-abuse scenario needs. NOT part of the default
-# `docker compose up`, because it genuinely grants more power than the base
-# lab needs — kept separate and explicit so you opt into it deliberately.
+# Adds a disposable Docker-in-Docker sandbox (docker-sandbox) and points
+# edr-tester's Docker client at it via DOCKER_HOST, plus the extra Linux
+# capability simulate-privileged-container-abuse.sh uses. Kept as a
+# separate file from compose.yml so the base lab stays minimal; add it
+# with -f when you want these scenarios too.
 #
-# Safety model: edr-tester is NEVER given the real host's /var/run/docker.sock
-# and is NEVER run with `pid: host`. Everything it does via DOCKER_HOST below
-# talks to docker-sandbox, a nested dind container that is itself disposable
-# and `privileged: true` only with respect to ITSELF (standard requirement
-# for running a Docker daemon inside a container) — never with respect to
-# the real machine this lab runs on. Any "escape" simulate-docker-socket-
-# escape.sh demonstrates lands inside docker-sandbox's own throwaway
-# filesystem, not your real host.
+# docker-sandbox is its own throwaway container: edr-tester never touches
+# the real host's /var/run/docker.sock or shares its pid namespace, so
+# everything these scenarios do (including "escaping" in
+# simulate-docker-socket-escape.sh) stays inside docker-sandbox's own
+# filesystem and namespaces.
 #
 # Usage:
 #   docker compose -f compose.yml -f compose.privileged.yml up -d
@@ -33,7 +30,7 @@ services:
       - docker-sandbox
 
   # Disposable nested Docker daemon. privileged:true here is standard for
-  # running Docker-in-Docker and is scoped to this throwaway container —
+  # running Docker-in-Docker and is scoped to this throwaway container:
   # it does not touch, and has no path to, the real host Docker daemon or
   # filesystem. Reset by `docker compose down -v` (its storage is ephemeral
   # anyway: no volume is declared for it).
