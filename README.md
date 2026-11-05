@@ -58,11 +58,17 @@ control. Provided as-is, with no warranty; you run it at your own risk
 
 ## Run everything, one command
 
+On your disposable VM (see above), you need `git`, Docker, and the
+Docker Compose plugin installed. Then:
+
 ```bash
+git clone https://github.com/cymylau/edr-test-lab.git
+cd edr-test-lab
 bash run-everything.sh
 ```
 
-Run this from your host shell in the repo root, not inside a container:
+Run this from your host shell in the repo root (the `edr-test-lab`
+directory you just entered), not inside a container:
 it drives `docker compose` itself, including the privileged overlay. It
 brings up every container, runs setup, and runs every scenario, base and
 overlay, start to finish, logging a consolidated timeline per stage to
