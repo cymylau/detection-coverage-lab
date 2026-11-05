@@ -35,7 +35,7 @@ services:
   # filesystem. Reset by `docker compose down -v` (its storage is ephemeral
   # anyway: no volume is declared for it).
   docker-sandbox:
-    image: docker:27-dind
+    image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
     container_name: edr-lab-docker-sandbox
     hostname: docker-sandbox
     privileged: true

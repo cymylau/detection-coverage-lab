@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Keeps the pinned image digests in compose.yml / compose.privileged.yml fresh.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Keeps any workflow actions current, should workflows be added.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

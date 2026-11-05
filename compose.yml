@@ -1,7 +1,7 @@
 services:
   # Attacker workstation — runs the emulation chain (nmap -> IMDS -> base64 -> DNS exfil).
   edr-tester:
-    image: kalilinux/kali-rolling
+    image: kalilinux/kali-rolling@sha256:7997e0581c4f5c185cfe6773d5cae8fcc7c6b79798726ccaabf843af4bcd2013
     container_name: edr-test-lab
     hostname: attacker-workstation
     # NET_ADMIN lets lab-setup.sh alias 169.254.169.254 onto loopback.
@@ -43,7 +43,7 @@ services:
   # Local DNS sink — the "attacker-controlled nameserver" that receives exfil.
   # Logs every query and reassembles the decoded payload into ./results.
   dns-sink:
-    image: python:3.12-slim
+    image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
     container_name: edr-lab-dns-sink
     hostname: dns-sink
     command: ["python3", "/app/dns_sink.py"]
@@ -62,7 +62,7 @@ services:
   # scenarios (simulate-c2-beacon.sh, simulate-https-exfil.sh). Only ever
   # hands out one hardcoded, harmless no-op "task". Lab-internal only.
   mock-c2:
-    image: python:3.12-slim
+    image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
     container_name: edr-lab-mock-c2
     hostname: mock-c2
     command: ["python3", "/app/mock_c2.py"]
@@ -84,7 +84,7 @@ services:
   # something real to show for `sudo -l` / `sudo cat /etc/shadow`, not
   # just permission-denied noise.
   internal-host:
-    image: lscr.io/linuxserver/openssh-server:latest
+    image: lscr.io/linuxserver/openssh-server:latest@sha256:aa4e1b3916e8555f24e574e6108b0b89a1b20362b0a11800a71280b45999649e
     container_name: edr-lab-internal-host
     hostname: internal-host
     environment:

@@ -23,6 +23,28 @@ traffic stays on the lab's internal `labnet` bridge network.
 connected to any real account/host outside the lab. This reproduces
 attacker behaviour for detection testing, not a working attack.
 
+## Disposable hosts only
+
+**Run this only on a machine you will delete afterwards. Do not leave
+it lurking.** The lab intentionally runs attacker-style behaviour and
+weak configurations: a Kali box with extra capabilities, an SSH host
+with passwordless sudo, and (with the privileged overlay) a privileged
+Docker-in-Docker daemon with no authentication. It also installs
+tooling and writes logs and decoy data as it goes.
+
+Recommended workflow:
+
+1. Commission a fresh VM (or cloud instance) for the test.
+2. Install Docker, clone this repo, and run the scenarios.
+3. Collect what you need from `./results/` and your EDR/CDR console.
+4. Tear down (`docker compose -f compose.yml -f compose.privileged.yml
+   down -v`), then **delete the VM**.
+
+Never run it on a workstation, shared server, or production system.
+Never publish any of its ports or attach it to a network you don't
+control. Provided as-is, with no warranty; you run it at your own risk
+(see `LICENSE`). To report a problem, see `SECURITY.md`.
+
 ## Components
 
 | | |
