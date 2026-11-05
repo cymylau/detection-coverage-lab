@@ -41,7 +41,11 @@ step "SUID binary discovery (ATT&CK T1548.001)"
 find / -xdev -perm -4000 -type f 2>/dev/null | tee -a "$LOG"
 
 step "sudo permission enumeration (ATT&CK T1069.001)"
-sudo -l 2>&1 | tee -a "$LOG" || say "(sudo not available/configured — expected in most containers)"
+if command -v sudo >/dev/null 2>&1; then
+    sudo -l 2>&1 | tee -a "$LOG"
+else
+    say "(sudo not installed in this image — expected in most minimal containers)"
+fi
 
 step "Done — host-recon emulation complete."
 say "artifacts: $LOG"

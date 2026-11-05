@@ -22,6 +22,7 @@ INTERNAL_HOST="${INTERNAL_HOST:-internal-host}"
 LAB_SUBNET="${LAB_SUBNET:-}"  # optional, e.g. 172.20.0.0/24 — else resolve+scan single host
 SSH_USER="${INTERNAL_HOST_USER:-decoyuser}"
 SSH_PASS="${INTERNAL_HOST_PASS:-LAB-DECOY-NOT-REAL-PASSWORD}"
+SSH_PORT="${INTERNAL_HOST_SSH_PORT:-2222}"  # linuxserver/openssh-server listens on 2222, not 22
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/lateral_${SESSION}.log"
 
@@ -39,14 +40,14 @@ fi
 say "internal-host resolved to $TARGET_IP"
 
 step "network discovery — sweep internal host for open services (ATT&CK T1046)"
-nmap -Pn -n -p 22,80,443 --reason "$TARGET_IP" 2>&1 | tee -a "$LOG"
+nmap -Pn -n -p 22,80,443,2222 --reason "$TARGET_IP" 2>&1 | tee -a "$LOG"
 
 step "remote services — SSH login using decoy credentials (ATT&CK T1021.004)"
 if ! command -v sshpass >/dev/null 2>&1; then
     say "!! sshpass not installed — run: bash test-scripts/install-extra-tools.sh"
     exit 1
 fi
-RESULT="$(sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+RESULT="$(sshpass -p "$SSH_PASS" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
     "${SSH_USER}@${TARGET_IP}" "id; hostname" 2>&1)"
 say "ssh login attempt result:"
 echo "$RESULT" | tee -a "$LOG"
