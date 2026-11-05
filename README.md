@@ -173,6 +173,38 @@ docker compose down
 docker compose -f compose.yml -f compose.privileged.yml down
 ```
 
+## Acknowledgements
+
+Security is a team effort, and this lab stands on a lot of other
+people's work. With thanks to:
+
+- **[Kali Linux](https://www.kali.org/)** and the Offensive Security
+  team and contributors, for the attacker workstation image.
+- **[MITRE ATT&CK](https://attack.mitre.org/)**, for the shared
+  vocabulary of tactics and techniques that every scenario here is
+  mapped to. Defenders and red teams alike owe it a great deal.
+- **[Anthropic](https://www.anthropic.com/)**, whose Claude model wrote
+  the scenarios, scripts, and documentation (see Author above).
+- **[Docker](https://www.docker.com/)**, for Compose and the
+  Docker-in-Docker image that make the lab disposable.
+- **[LinuxServer.io](https://www.linuxserver.io/)**, for the OpenSSH
+  server image used as the lateral-movement target.
+- **[Python Software Foundation](https://www.python.org/)** and the
+  Python community, for the runtime behind the mock services.
+- **[Debian](https://www.debian.org/)** and the open-source maintainers
+  of nmap, curl, netcat, OpenSSH, sqlite, and the other tools the
+  scenarios drive.
+- **The EDR/CDR vendors, detection engineers, and threat researchers**
+  whose published detections, write-ups, and tradecraft analysis shaped
+  what a good test needs to exercise.
+- **The wider security community**, for decades of shared research,
+  open tooling, and responsible disclosure. Without it there would be
+  nothing worth detecting, and no one to detect it.
+
+If you contributed to something this lab relies on and aren't
+credited, that's an oversight, not a statement. Open an issue or PR and
+it will be fixed.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
