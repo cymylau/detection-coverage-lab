@@ -67,13 +67,15 @@ cd edr-test-lab
 bash run-everything.sh
 ```
 
-Run this from your host shell in the repo root (the `edr-test-lab`
-directory you just entered), not inside a container:
-it drives `docker compose` itself, including the privileged overlay. It
+Run these from your host shell, not inside a container. The script
+drives `docker compose` itself, including the privileged overlay. It
 brings up every container, runs setup, and runs every scenario, base and
 overlay, start to finish, logging a consolidated timeline per stage to
-`./results/`. Tears down with `docker compose -f compose.yml -f
-compose.privileged.yml down` when you're done (printed at the end).
+`./results/`.
+
+When it finishes, it prints the teardown command:
+`docker compose -f compose.yml -f compose.privileged.yml down`. Run it,
+then delete the VM.
 
 ## Finer-grained control
 
