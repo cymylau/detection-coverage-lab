@@ -1,17 +1,5 @@
 # Cloud & Container Detection Test Lab (EDR/CDR)
 
-```
-                               _.-"  "-._
-                          _.-"            "-._
-                     .-""                      ""-.
-                 .-"                                "-.
-    .--._    .-"                                       "-.    _.--.
- .-"     "--"                 cymylau                       "--"     "-.
-(___________________________________________________________________)
-```
-
-*cymylau* is Welsh for "clouds".
-
 ## Authorship
 
 The scenarios, scripts, and documentation in this repository were
