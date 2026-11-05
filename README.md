@@ -1,11 +1,15 @@
 # Cloud & Container Detection Test Lab (EDR/CDR)
 
-## Authorship
+## Author
 
 The scenarios, scripts, and documentation in this repository were
 written by Claude (Anthropic), co-authored with human review and
 direction throughout. Treat it accordingly: review it before relying
 on it, the way you would any AI-authored code.
+
+---
+
+## Introduction
 
 A self-contained, lab-only environment for validating detection coverage
 against attacker behaviour targeting cloud and containerised platforms:
