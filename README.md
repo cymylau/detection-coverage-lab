@@ -23,42 +23,54 @@ attacker behaviour for detection testing, not a working attack.
 | `services/mock_c2.py` | mock C2/cloud API: beacon/tasking, mining-pool, cloud-identity, and logging-control endpoints |
 | `test-scripts/` | setup + one script per scenario (table below) |
 
-## Setup
+## Run everything, one command
+
+```bash
+bash run-everything.sh
+```
+
+Run this from your host shell in the repo root, not inside a container:
+it drives `docker compose` itself, including the privileged overlay. It
+brings up every container, runs setup, and runs every scenario, base and
+overlay, start to finish, logging a consolidated timeline per stage to
+`./results/`. Tears down with `docker compose -f compose.yml -f
+compose.privileged.yml down` when you're done (printed at the end).
+
+## Finer-grained control
+
+Three levels, from broadest to narrowest. Each is independent: pick
+whichever matches what you want to test.
+
+**All base scenarios:**
 
 ```bash
 docker compose up -d
 docker compose exec edr-tester bash test-scripts/lab-setup.sh
 docker compose exec edr-tester bash test-scripts/install-extra-tools.sh
+docker compose exec edr-tester bash test-scripts/run-all.sh
 ```
 
-The container-escape scenarios (Docker-socket escape, privileged-container
-abuse) need one more compose file and one more install step:
+**All overlay scenarios** (the ones marked (overlay) in the table below):
 
 ```bash
 docker compose -f compose.yml -f compose.privileged.yml up -d
 docker compose -f compose.yml -f compose.privileged.yml exec edr-tester \
+    bash test-scripts/lab-setup.sh
+docker compose -f compose.yml -f compose.privileged.yml exec edr-tester \
     bash test-scripts/install-container-tools.sh
+docker compose -f compose.yml -f compose.privileged.yml exec edr-tester \
+    bash test-scripts/simulate-privileged-chain.sh
 ```
 
-From here on, just add `-f compose.yml -f compose.privileged.yml` to any
-`docker compose` command if you brought the overlay up; everything else
-below works the same either way.
-
-## Run everything
-
-```bash
-docker compose exec edr-tester bash test-scripts/run-all.sh
-```
-
-Runs setup and every scenario below (except the container-escape ones) in
-sequence, logging a consolidated timeline to
-`results/run_all_<session>.log`. If you brought up the privileged overlay,
-`test-scripts/simulate-privileged-chain.sh` runs those too. Or run any
-scenario on its own the same way, for example:
+**One scenario at a time**, against whichever of the above you brought up:
 
 ```bash
 docker compose exec edr-tester bash test-scripts/simulate-host-recon.sh
 ```
+
+Any scenario script can be run on its own this way, in any order, as many
+times as you like; each one is self-contained and writes its own log to
+`./results/`.
 
 ## Scenario coverage (ATT&CK)
 
