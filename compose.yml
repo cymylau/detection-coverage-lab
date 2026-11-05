@@ -24,14 +24,22 @@ services:
       - DNS_SINK=dns-sink
       - RESULTS_DIR=/home/root/results
       - SERVICES_DIR=/home/root/services
+      - DECOY_DIR=/home/root/decoy-data
+      - C2_HOST=mock-c2
+      - C2_PORT=8443
+      - INTERNAL_HOST=internal-host
+      - INTERNAL_HOST_USER=decoyuser
+      - INTERNAL_HOST_PASS=LAB-DECOY-NOT-REAL-PASSWORD
     networks:
       - labnet
     depends_on:
       - dns-sink
+      - mock-c2
+      - internal-host
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: '1'
           memory: 2G
 
   # Local DNS sink — the "attacker-controlled nameserver" that receives exfil.
@@ -49,6 +57,41 @@ services:
       - DNS_PORT=53
       - EXFIL_DOMAIN=exfil.lab
       - RESULTS_DIR=/home/root/results
+    networks:
+      - labnet
+
+  # Mock C2 server — attacker-controlled HTTP endpoint for beacon/exfil
+  # scenarios (simulate-c2-beacon.sh, simulate-https-exfil.sh). Only ever
+  # hands out one hardcoded, harmless no-op "task". Lab-internal only.
+  mock-c2:
+    image: python:3.12-slim
+    container_name: edr-lab-mock-c2
+    hostname: mock-c2
+    command: ["python3", "/app/mock_c2.py"]
+    volumes:
+      - ./services:/app:ro
+      - ./results:/home/root/results
+    environment:
+      - C2_BIND=0.0.0.0
+      - C2_PORT=8443
+      - RESULTS_DIR=/home/root/results
+    networks:
+      - labnet
+
+  # Internal "second host" — target for lateral-movement emulation
+  # (simulate-lateral-movement.sh). Decoy account only, no real data,
+  # reachable only on the lab's internal bridge network.
+  internal-host:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: edr-lab-internal-host
+    hostname: internal-host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - PASSWORD_ACCESS=true
+      - USER_NAME=decoyuser
+      - USER_PASSWORD=LAB-DECOY-NOT-REAL-PASSWORD
     networks:
       - labnet
 

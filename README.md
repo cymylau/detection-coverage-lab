@@ -61,6 +61,63 @@ Use these as detection test cases:
 - A burst of outbound DNS queries with long, high-entropy subdomain labels to a
   single domain (`*.exfil.lab`) — classic DNS-tunnel signature.
 
+## Additional scenarios
+
+Beyond the metadata-theft + DNS-exfil chain above, the lab includes
+standalone scenario scripts, each independently runnable and ATT&CK-tagged
+in its own header. All use decoy data only and stay on the lab's internal
+`labnet` network.
+
+| Script | Emulates | ATT&CK |
+|---|---|---|
+| `seed-decoys.sh` | plants decoy SSH key, cloud creds, browser-login store, decoy documents (prereq for several scripts below) | — |
+| `simulate-host-recon.sh` | account/system/permission discovery | T1033, T1082, T1087.001, T1548.001, T1069.001 |
+| `simulate-credential-discovery.sh` | on-disk credential hunting (SSH keys, cloud creds, browser store) | T1552.004, T1552.001, T1555.003 |
+| `simulate-persistence.sh` (`--cleanup` to remove) | cron, systemd user unit, shell-profile autostart | T1053.003, T1543.002, T1546.004 |
+| `simulate-defense-evasion.sh` | process masquerading, timestomping, history clearing | T1036.003, T1070.006, T1070.003 |
+| `simulate-collection-staging.sh` | bulk-collect decoy documents, tar/zip into an archive | T1119, T1560.001 |
+| `simulate-c2-beacon.sh` | jittered HTTP check-in + decoy task execution against `mock-c2` | T1071.001, T1573, T1059/T1105 |
+| `simulate-https-exfil.sh` | POST a staged archive to `mock-c2` (non-DNS exfil channel) | T1041 |
+| `simulate-lateral-movement.sh` | nmap sweep + SSH login to `internal-host` with decoy creds | T1046, T1021.004 |
+| `simulate-full-chain.sh` | orchestrates all of the above into one multi-stage, correlatable kill chain | (combined) |
+
+New supporting services: `services/mock_c2.py` (mock C2 for beacon/exfil
+scenarios) and the `internal-host` compose service (SSH target for lateral
+movement), both decoy-only and lab-internal.
+
+### Run everything in one go
+
+```bash
+docker compose up -d
+docker compose exec edr-tester bash test-scripts/run-all.sh
+```
+
+`run-all.sh` runs setup (`lab-setup.sh`, `install-extra-tools.sh`) and then
+every scenario script via `simulate-full-chain.sh`, logging a consolidated
+timeline to `results/run_all_<session>.log` alongside each stage's own
+artifacts. Stops on the first failure (`set -e`).
+
+Or install extra tooling the newer scripts need (on top of `lab-setup.sh`)
+and run scenarios individually:
+
+```bash
+docker compose exec edr-tester bash test-scripts/install-extra-tools.sh
+```
+
+Then run any scenario the same way as the original chain, e.g.:
+
+```bash
+docker compose exec edr-tester bash test-scripts/seed-decoys.sh
+docker compose exec edr-tester bash test-scripts/simulate-host-recon.sh
+docker compose exec edr-tester bash test-scripts/simulate-full-chain.sh
+```
+
+> A proposed ransomware-style impact/encryption scenario (mass file
+> rename + transform + ransom note) was scoped but not implemented here —
+> generating that content was blocked by a safety system during this
+> session. If you still want impact/T1486-style coverage, consider testing
+> it with a purpose-built commercial ransomware-simulator tool instead.
+
 ## Teardown
 
 ```bash
