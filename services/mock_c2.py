@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mock C2 server for the EDR test lab.
+Mock C2 server for the cloud/container EDR (CDR) test lab.
 
 A minimal HTTP server that stands in for an attacker-controlled command and
 control server, purely to give beacon/exfil emulation scripts a destination
@@ -12,9 +12,16 @@ does, it is always a no-op decoy command run only inside the ephemeral
 attacker container.
 
 Endpoints:
-  GET  /beacon            -- check-in; logs source + headers, returns a task
+  GET  /beacon             -- check-in; logs source + headers, returns a task
   POST /task-result        -- scenario posts back a decoy "result"
   POST /exfil              -- scenario POSTs a decoy archive here (HTTPS-exfil emulation)
+  GET  /pool/getwork       -- mock mining-pool work request (resource-hijack emulation)
+  POST /pool/submit        -- mock mining-pool share submission
+  POST /cloud/identity     -- mock cloud/K8s token-exchange endpoint; logs any bearer
+                               token presented (workload-identity-theft emulation)
+  POST /logging/disable    -- mock cloud audit-log control-plane call (impair-logging
+                               emulation); never actually disables anything real
+  GET  /logging/status     -- reports the mock's own (in-memory only) logging flag
 """
 import json
 import os
@@ -37,6 +44,11 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 BEACON_LOG = os.path.join(RESULTS_DIR, "mock_c2_beacons.log")
 EXFIL_DIR = os.path.join(RESULTS_DIR, "c2_exfil_received")
 os.makedirs(EXFIL_DIR, exist_ok=True)
+
+# In-memory only — never a real control-plane setting. Lets
+# simulate-impair-logging.sh demonstrate "disable logging then act" sequencing
+# against a mock, with no effect on anything outside this process.
+_mock_state = {"logging_enabled": True}
 
 
 def log(line: str):
@@ -61,6 +73,11 @@ class C2Handler(BaseHTTPRequestHandler):
             ua = self.headers.get("User-Agent", "-")
             log(f"beacon from {self.client_address[0]} ua='{ua}' path={self.path}")
             self._send_json({"status": "ok", "task": DECOY_TASK})
+        elif self.path.startswith("/pool/getwork"):
+            log(f"mining-pool getwork from {self.client_address[0]} path={self.path}")
+            self._send_json({"job_id": "lab-decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
+        elif self.path.startswith("/logging/status"):
+            self._send_json({"logging_enabled": _mock_state["logging_enabled"]})
         else:
             self.send_error(404, "Not Found")
 
@@ -77,6 +94,19 @@ class C2Handler(BaseHTTPRequestHandler):
                 f.write(body)
             log(f"exfil POST from {self.client_address[0]}: {len(body)} bytes -> {out}")
             self._send_json({"status": "received", "bytes": len(body)})
+        elif self.path.startswith("/pool/submit"):
+            log(f"mining-pool share submit from {self.client_address[0]}: {body[:200]!r}")
+            self._send_json({"status": "accepted"})
+        elif self.path.startswith("/cloud/identity"):
+            auth = self.headers.get("Authorization", "-")
+            log(f"cloud/K8s identity-exchange call from {self.client_address[0]} "
+                f"Authorization='{auth[:80]}' body={body[:200]!r}")
+            self._send_json({"status": "ok", "decoy_session_token": "LAB-DECOY-EXCHANGED-TOKEN-NOT-REAL"})
+        elif self.path.startswith("/logging/disable"):
+            _mock_state["logging_enabled"] = False
+            log(f"!! logging/disable call from {self.client_address[0]} — "
+                f"mock audit-log state set to disabled (in-memory only, nothing real affected)")
+            self._send_json({"status": "ok", "logging_enabled": False})
         else:
             self.send_error(404, "Not Found")
 

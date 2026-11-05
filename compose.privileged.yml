@@ -1,0 +1,48 @@
+# compose.privileged.yml — OPT-IN overlay for container-escape scenarios.
+#
+# Adds a disposable, fully isolated Docker-in-Docker "sandbox" daemon and
+# points edr-tester's Docker client at it, plus the extra Linux capability
+# the privileged-container-abuse scenario needs. NOT part of the default
+# `docker compose up`, because it genuinely grants more power than the base
+# lab needs — kept separate and explicit so you opt into it deliberately.
+#
+# Safety model: edr-tester is NEVER given the real host's /var/run/docker.sock
+# and is NEVER run with `pid: host`. Everything it does via DOCKER_HOST below
+# talks to docker-sandbox, a nested dind container that is itself disposable
+# and `privileged: true` only with respect to ITSELF (standard requirement
+# for running a Docker daemon inside a container) — never with respect to
+# the real machine this lab runs on. Any "escape" simulate-docker-socket-
+# escape.sh demonstrates lands inside docker-sandbox's own throwaway
+# filesystem, not your real host.
+#
+# Usage:
+#   docker compose -f compose.yml -f compose.privileged.yml up -d
+#   docker compose -f compose.yml -f compose.privileged.yml exec edr-tester \
+#       bash test-scripts/install-container-tools.sh
+#   docker compose -f compose.yml -f compose.privileged.yml exec edr-tester \
+#       bash test-scripts/simulate-docker-socket-escape.sh
+#   docker compose -f compose.yml -f compose.privileged.yml down
+
+services:
+  edr-tester:
+    cap_add:
+      - SYS_PTRACE  # for the nsenter/ptrace attempts in simulate-privileged-container-abuse.sh
+    environment:
+      - DOCKER_HOST=tcp://docker-sandbox:2375
+    depends_on:
+      - docker-sandbox
+
+  # Disposable nested Docker daemon. privileged:true here is standard for
+  # running Docker-in-Docker and is scoped to this throwaway container —
+  # it does not touch, and has no path to, the real host Docker daemon or
+  # filesystem. Reset by `docker compose down -v` (its storage is ephemeral
+  # anyway: no volume is declared for it).
+  docker-sandbox:
+    image: docker:27-dind
+    container_name: edr-lab-docker-sandbox
+    hostname: docker-sandbox
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    networks:
+      - labnet

@@ -14,6 +14,7 @@ set -u
 HOME_DIR="${HOME:-/home/root}"
 DECOY_DIR="${DECOY_DIR:-${HOME_DIR}/decoy-data}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
+SA_DIR="/var/run/secrets/kubernetes.io/serviceaccount"
 
 say() { echo "[seed-decoys] $*"; }
 
@@ -22,7 +23,8 @@ cleanup() {
     rm -rf "${HOME_DIR}/.ssh/id_rsa" "${HOME_DIR}/.ssh/id_rsa.pub" \
            "${HOME_DIR}/.aws" \
            "${HOME_DIR}/.mozilla_decoy" \
-           "$DECOY_DIR"
+           "$DECOY_DIR" \
+           "$SA_DIR"
     say "done."
 }
 
@@ -92,5 +94,19 @@ for i in 1 2 3 4 5; do
     } > "$f"
 done
 say "seeded $(ls "${DECOY_DIR}/documents" | wc -l) decoy documents -> ${DECOY_DIR}/documents"
+
+# --- Decoy Kubernetes service-account token (real mount path, decoy content) --
+if [ ! -f "${SA_DIR}/token" ]; then
+    mkdir -p "$SA_DIR"
+    # Header/payload are real-looking base64url JWT shapes but decode to decoy
+    # text, not a signed token — not usable against any real API server.
+    printf 'eyJhbGciOiJSUzI1NiIsImtpZCI6ImxhYi1kZWNveSJ9.eyJzdWIiOiJsYWItZGVjb3kiLCJuYW1lIjoiRURSLUxBQi1ERUNPWS1OT1QtQS1SRUFMLVRPS0VOIn0.bGFiLWRlY295LXNpZ25hdHVyZS1ub3QtcmVhbA==' \
+        > "${SA_DIR}/token"
+    echo "-----BEGIN CERTIFICATE-----
+TEFCLURFQ09ZLUNFUlRJRklDQVRFLU5PVC1BLVJFQUwtQ0VSVC1GT1ItVEhFLUVESi1URVNULUxBQg==
+-----END CERTIFICATE-----" > "${SA_DIR}/ca.crt"
+    echo "lab-decoy-namespace" > "${SA_DIR}/namespace"
+    say "seeded decoy Kubernetes service-account token -> ${SA_DIR}/token"
+fi
 
 say "done. Use --cleanup to remove everything this script created."
