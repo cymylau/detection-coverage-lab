@@ -8,7 +8,7 @@
 # without ever risking real data. Safe to re-run (idempotent) and to remove
 # with --cleanup.
 #
-# Run inside the edr-tester container:  bash test-scripts/seed-decoys.sh
+# Run inside the ops-console container:  bash playbooks/seed-decoys.sh
 set -u
 
 HOME_DIR="${HOME:-/home/root}"
@@ -45,7 +45,7 @@ if [ ! -f "${HOME_DIR}/.ssh/id_rsa" ]; then
         echo "-----END OPENSSH PRIVATE KEY-----"
     } > "${HOME_DIR}/.ssh/id_rsa"
     chmod 600 "${HOME_DIR}/.ssh/id_rsa"
-    echo "ssh-rsa EDR-LAB-DECOY-NOT-A-REAL-KEY lab-decoy@edr-test-lab" \
+    echo "ssh-rsa NORTHLINE-DECOY-NOT-A-REAL-KEY northline-decoy@northline-ops-console" \
         > "${HOME_DIR}/.ssh/id_rsa.pub"
     say "seeded decoy SSH keypair -> ${HOME_DIR}/.ssh/id_rsa"
 fi
@@ -54,8 +54,8 @@ fi
 if [ ! -f "${HOME_DIR}/.aws/credentials" ]; then
     cat > "${HOME_DIR}/.aws/credentials" <<'EOF'
 [default]
-aws_access_key_id = AKIA_LAB_DECOY_DO_NOT_USE
-aws_secret_access_key = LAB+DECOY+SECRET+NOT+A+REAL+KEY+00000000
+aws_access_key_id = AKIA_DECOY_DO_NOT_USE
+aws_secret_access_key = DECOY+SECRET+NOT+A+REAL+KEY+00000000
 EOF
     say "seeded decoy ~/.aws/credentials"
 fi
@@ -71,13 +71,13 @@ con = sqlite3.connect(db)
 con.execute("CREATE TABLE moz_logins (hostname TEXT, username TEXT, password TEXT)")
 con.execute(
     "INSERT INTO moz_logins VALUES (?, ?, ?)",
-    ("https://lab-decoy.example", "decoy-user", "LAB-DECOY-NOT-A-REAL-PASSWORD"),
+    ("https://northline-decoy.example", "decoy-user", "DECOY-NOT-A-REAL-PASSWORD"),
 )
 con.commit()
 con.close()
 PYEOF
     else
-        echo "LAB-DECOY-NOT-REAL-SQLITE-CONTENT" > "$LOGIN_DB"
+        echo "DECOY-NOT-REAL-SQLITE-CONTENT" > "$LOGIN_DB"
     fi
     say "seeded decoy browser-credential store -> $LOGIN_DB"
 fi
@@ -87,9 +87,9 @@ for i in 1 2 3 4 5; do
     f="${DECOY_DIR}/documents/customer-records-${i}.txt"
     [ -f "$f" ] && continue
     {
-        echo "LAB DECOY DOCUMENT — customer-records-${i}"
+        echo "DECOY DOCUMENT — customer-records-${i}"
         echo "This file exists only to be discovered/staged/encrypted by EDR"
-        echo "test-lab scenarios. It contains no real data."
+        echo "these scenarios. It contains no real data."
         head -c 2048 /dev/urandom | base64
     } > "$f"
 done
@@ -105,7 +105,7 @@ if [ ! -f "${SA_DIR}/token" ]; then
     echo "-----BEGIN CERTIFICATE-----
 TEFCLURFQ09ZLUNFUlRJRklDQVRFLU5PVC1BLVJFQUwtQ0VSVC1GT1ItVEhFLUVESi1URVNULUxBQg==
 -----END CERTIFICATE-----" > "${SA_DIR}/ca.crt"
-    echo "lab-decoy-namespace" > "${SA_DIR}/namespace"
+    echo "northline-decoy-namespace" > "${SA_DIR}/namespace"
     say "seeded decoy Kubernetes service-account token -> ${SA_DIR}/token"
 fi
 

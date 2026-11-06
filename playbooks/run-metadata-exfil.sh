@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# simulate-metadata-exfil.sh
+# run-metadata-exfil.sh
 # ---------------------------------------------------------------------------
-# EDR DETECTION TEST — LAB USE ONLY
+# EDR DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates the adversary behaviour chain below so that EDR / telemetry can be
 # validated against it. Everything is self-contained: the metadata endpoint
 # serves DECOY credentials and the DNS "exfil" goes to a local sink on the
-# lab network. No real credentials exist and nothing leaves the lab.
+# environment's network. No real credentials exist and nothing leaves the environment.
 #
 #   1. Discovery      nmap scan of the link-local metadata IP   (T1046 / T1595)
 #   2. Credential acc. curl the IMDS IAM credentials endpoint   (T1552.005)
@@ -20,8 +20,8 @@
 set -u
 
 METADATA_IP="${METADATA_IP:-169.254.169.254}"
-EXFIL_DOMAIN="${EXFIL_DOMAIN:-exfil.lab}"
-DNS_SINK="${DNS_SINK:-dns-sink}"          # hostname or IP of the lab DNS sink
+EXFIL_DOMAIN="${EXFIL_DOMAIN:-exfil.internal}"
+DNS_SINK="${DNS_SINK:-dns-sink}"          # hostname or IP of the environment's DNS sink
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/run_${SESSION}.log"
@@ -36,7 +36,7 @@ resolve_sink() {
     getent hosts "$DNS_SINK" 2>/dev/null | awk '{print $1; exit}' || echo "$DNS_SINK"
 }
 
-say "EDR test lab :: metadata-theft + DNS-exfil emulation :: session=$SESSION"
+say "Northline :: metadata-theft + DNS-exfil emulation :: session=$SESSION"
 say "metadata=$METADATA_IP exfil-domain=$EXFIL_DOMAIN dns-sink=$DNS_SINK"
 
 # --- Step 1: Discovery -----------------------------------------------------
@@ -53,7 +53,7 @@ curl -s --max-time 5 "${ROLE_URL}/${ROLE}" -o "$RAW"
 say "retrieved decoy credential blob -> $RAW ($(wc -c < "$RAW" 2>/dev/null || echo 0) bytes)"
 
 if [ ! -s "$RAW" ]; then
-    say "!! no data from metadata endpoint — is mock_imds running on $METADATA_IP? aborting."
+    say "!! no data from metadata endpoint — is metadata_api running on $METADATA_IP? aborting."
     exit 1
 fi
 

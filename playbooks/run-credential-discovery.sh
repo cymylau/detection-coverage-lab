@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# simulate-credential-discovery.sh
+# run-credential-discovery.sh
 # ---------------------------------------------------------------------------
-# EDR DETECTION TEST — LAB USE ONLY
+# EDR DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates on-disk credential hunting (LaZagne/Mimikatz-adjacent file-based
 # behaviour, not memory dumping). Requires decoys from seed-decoys.sh — run
-# that first. Every file touched here is a DECOY planted by this lab; no
+# that first. Every file touched here is a DECOY planted by this environment; no
 # real key material or credentials exist on disk.
 #
 #   find/grep for SSH keys          Unsecured credentials: SSH keys (T1552.004)
@@ -24,10 +24,10 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "EDR test lab :: on-disk credential-discovery emulation :: session=$SESSION"
+say "Northline :: on-disk credential-discovery emulation :: session=$SESSION"
 
 if [ ! -f "${HOME_DIR}/.ssh/id_rsa" ] && [ ! -f "${HOME_DIR}/.aws/credentials" ]; then
-    say "!! no decoys found — run: bash test-scripts/seed-decoys.sh first"
+    say "!! no decoys found — run: bash playbooks/seed-decoys.sh first"
 fi
 
 step "SSH private key discovery (ATT&CK T1552.004)"

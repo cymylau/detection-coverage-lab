@@ -7,8 +7,8 @@
 # container) and util-linux (nsenter). Run only when using the
 # compose.privileged.yml overlay.
 #
-# Run inside the edr-tester container, after lab-setup.sh:
-#   bash test-scripts/install-container-tools.sh
+# Run inside the ops-console container, after bootstrap.sh:
+#   bash playbooks/install-container-tools.sh
 set -eu
 
 echo "[install-container-tools] installing docker CLI + util-linux..."
@@ -20,7 +20,7 @@ apt-get install -y --no-install-recommends docker-cli util-linux >/dev/null
 
 echo "[install-container-tools] verifying DOCKER_HOST is reachable..."
 if [ -z "${DOCKER_HOST:-}" ]; then
-    echo "[install-container-tools] !! DOCKER_HOST is not set — bring the lab up with:"
+    echo "[install-container-tools] !! DOCKER_HOST is not set — bring the environment up with:"
     echo "    docker compose -f compose.yml -f compose.privileged.yml up -d"
     exit 1
 fi

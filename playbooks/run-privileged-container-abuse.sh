@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# simulate-privileged-container-abuse.sh
+# run-privileged-container-abuse.sh
 # ---------------------------------------------------------------------------
-# CLOUD/CONTAINER EDR (CDR) DETECTION TEST — LAB USE ONLY
+# CLOUD/CONTAINER EDR (CDR) DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates a container that holds extra Linux capabilities (SYS_PTRACE here,
 # added by compose.privileged.yml) attempting host-namespace escape
-# primitives. edr-tester is never given `pid: host` or the real host
+# primitives. ops-console is never given `pid: host` or the real host
 # namespaces, so these attempts are expected to fail against THIS
 # container's own init (pid 1) rather than the real host's — the point is
 # to generate the attempted syscalls/commands an EDR should flag regardless
@@ -26,7 +26,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "CDR test lab :: privileged-container-capability-abuse emulation :: session=$SESSION"
+say "Northline :: privileged-container-capability-abuse emulation :: session=$SESSION"
 
 step "capability discovery (ATT&CK T1082-adjacent)"
 if command -v capsh >/dev/null 2>&1; then
@@ -40,7 +40,7 @@ if command -v nsenter >/dev/null 2>&1; then
     nsenter --target 1 --mount --uts --ipc --net --pid -- id 2>&1 | tee -a "$LOG" \
         || say "(failed as expected — no real host pid namespace is shared into this container)"
 else
-    say "!! nsenter not installed — run: bash test-scripts/install-container-tools.sh"
+    say "!! nsenter not installed — run: bash playbooks/install-container-tools.sh"
 fi
 
 step "probe: cgroup release_agent breakout surface (ATT&CK T1611, discovery only)"

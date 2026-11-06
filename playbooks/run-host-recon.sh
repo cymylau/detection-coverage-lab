@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# simulate-host-recon.sh
+# run-host-recon.sh
 # ---------------------------------------------------------------------------
-# EDR DETECTION TEST — LAB USE ONLY
+# EDR DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates basic post-compromise host/account/permission discovery — the
 # commands an attacker runs first on a freshly landed box, before deciding
@@ -24,7 +24,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "EDR test lab :: host-recon emulation :: session=$SESSION"
+say "Northline :: host-recon emulation :: session=$SESSION"
 
 step "whoami / id / uname -a (ATT&CK T1033, T1082)"
 whoami 2>&1 | tee -a "$LOG"

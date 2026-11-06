@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# simulate-image-secret-discovery.sh
+# run-image-secret-discovery.sh
 # ---------------------------------------------------------------------------
-# CLOUD/CONTAINER EDR (CDR) DETECTION TEST — LAB USE ONLY
+# CLOUD/CONTAINER EDR (CDR) DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates hunting for secrets accidentally baked into container image
 # layers: build a small decoy image (secret set as an ENV in one layer,
@@ -20,22 +20,22 @@ set -u
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/imagesecrets_${SESSION}.log"
-BUILD_DIR="/tmp/edr-lab-image-secret-${SESSION}"
-IMAGE_TAG="edr-lab-decoy-image:${SESSION}"
+BUILD_DIR="/tmp/northline-image-secret-${SESSION}"
+IMAGE_TAG="northline-decoy-image:${SESSION}"
 
 mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "CDR test lab :: image/secret-discovery emulation :: session=$SESSION"
+say "Northline :: image/secret-discovery emulation :: session=$SESSION"
 
 if [ -z "${DOCKER_HOST:-}" ]; then
-    say "!! DOCKER_HOST not set. Bring the lab up with the privileged overlay:"
+    say "!! DOCKER_HOST not set. Bring the environment up with the privileged overlay:"
     say "     docker compose -f compose.yml -f compose.privileged.yml up -d"
     exit 1
 fi
 if ! command -v docker >/dev/null 2>&1; then
-    say "!! docker CLI not installed — run: bash test-scripts/install-container-tools.sh"
+    say "!! docker CLI not installed — run: bash playbooks/install-container-tools.sh"
     exit 1
 fi
 
@@ -48,8 +48,8 @@ mkdir -p "$BUILD_DIR"
 #     earlier layer's tar and recoverable by exporting+grepping layers
 cat > "$BUILD_DIR/Dockerfile" <<'EOF'
 FROM alpine:3.20
-ENV LAB_DECOY_API_KEY="LAB-DECOY-BAKED-IN-SECRET-NOT-REAL-00000000"
-RUN echo "LAB-DECOY-SECRET-FILE-CONTENT-NOT-REAL-11111111" > /tmp/build-secret.txt \
+ENV DECOY_API_KEY="DECOY-BAKED-IN-SECRET-NOT-REAL-00000000"
+RUN echo "DECOY-SECRET-FILE-CONTENT-NOT-REAL-11111111" > /tmp/build-secret.txt \
     && echo "(secret file exists in this layer)"
 RUN rm -f /tmp/build-secret.txt
 RUN apk add --no-cache ca-certificates
@@ -75,10 +75,10 @@ for entry in $(tar -tf "$EXPORT_TAR" 2>/dev/null | grep -E '(blobs/sha256/.+|/la
     # with containerd snapshotter) — try gunzip, fall back to raw bytes.
     # Two separate extractions (not a shell variable) to stay binary-safe.
     CONTENT="$(tar -xOf "$EXPORT_TAR" "$entry" 2>/dev/null | zcat 2>/dev/null \
-        | grep -a -m1 'LAB-DECOY-SECRET-FILE-CONTENT')"
+        | grep -a -m1 'DECOY-SECRET-FILE-CONTENT')"
     if [ -z "$CONTENT" ]; then
         CONTENT="$(tar -xOf "$EXPORT_TAR" "$entry" 2>/dev/null \
-            | grep -a -m1 'LAB-DECOY-SECRET-FILE-CONTENT')"
+            | grep -a -m1 'DECOY-SECRET-FILE-CONTENT')"
     fi
     if [ -n "$CONTENT" ]; then
         say "!! found 'deleted' secret still present in layer $entry: $CONTENT"

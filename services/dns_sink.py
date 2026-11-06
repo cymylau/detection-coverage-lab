@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-DNS sink for the EDR test lab.
+DNS sink for the detection-coverage environment.
 
-A minimal UDP DNS server that answers every A query with a fixed lab IP and
+A minimal UDP DNS server that answers every A query with a fixed decoy IP and
 LOGS the full queried name. It stands in for the attacker-controlled
 nameserver in a DNS-exfiltration scenario (MITRE ATT&CK T1048.003 /
 T1071.004) so the emulation can "exfil" base64 chunks as subdomain labels
-without any data ever leaving the lab network.
+without any data ever leaving the environment's network.
 
 It reassembles chunks per session and writes the decoded payload to the
 results directory, purely so an analyst can confirm what was staged.
@@ -18,7 +18,7 @@ import struct
 
 BIND_ADDR = os.environ.get("DNS_BIND", "0.0.0.0")
 BIND_PORT = int(os.environ.get("DNS_PORT", "53"))
-EXFIL_DOMAIN = os.environ.get("EXFIL_DOMAIN", "exfil.lab").lower().strip(".")
+EXFIL_DOMAIN = os.environ.get("EXFIL_DOMAIN", "exfil.internal").lower().strip(".")
 RESULTS_DIR = os.environ.get("RESULTS_DIR", "/home/root/results")
 ANSWER_IP = os.environ.get("ANSWER_IP", "10.13.37.53")
 
@@ -63,7 +63,7 @@ def try_decode(session: str):
 
 
 def record(labels):
-    # Expect: <seq>.<session>.<b64chunk...>.exfil.lab
+    # Expect: <seq>.<session>.<b64chunk...>.exfil.internal
     dom_parts = EXFIL_DOMAIN.split(".")
     if len(labels) < len(dom_parts) + 3:
         return

@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# simulate-ssh-audit-session.sh
+# run-ssh-audit-session.sh
 # ---------------------------------------------------------------------------
-# CLOUD/CONTAINER EDR (CDR) DETECTION TEST - LAB USE ONLY
+# CLOUD/CONTAINER EDR (CDR) DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
-# Purpose-built to test AUDIT LOG CAPTURE, not just alerting: opens one
+# Purpose-built to exercise AUDIT LOG CAPTURE, not just alerting: opens one
 # interactive-style SSH session to internal-host (decoy creds) and runs a
 # sequence of audit-worthy commands within it, so you can check whether
 # your EDR/auditd pipeline captures:
@@ -15,7 +15,7 @@
 #     whether the read succeeds
 #   - a sudo-elevation event within the session
 #
-# Unlike simulate-lateral-movement.sh (one-shot `id; hostname` to prove SSH
+# Unlike run-lateral-movement.sh (one-shot `id; hostname` to prove SSH
 # access works), this opens a single persistent session and feeds it a
 # whole command sequence over stdin, closer to what a real interactive
 # attacker session looks like to a session-recording/audit tool.
@@ -32,7 +32,7 @@ set -u
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 INTERNAL_HOST="${INTERNAL_HOST:-internal-host}"
 SSH_USER="${INTERNAL_HOST_USER:-decoyuser}"
-SSH_PASS="${INTERNAL_HOST_PASS:-LAB-DECOY-NOT-REAL-PASSWORD}"
+SSH_PASS="${INTERNAL_HOST_PASS:-DECOY-NOT-REAL-PASSWORD}"
 SSH_PORT="${INTERNAL_HOST_SSH_PORT:-2222}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/ssh_audit_session_${SESSION}.log"
@@ -41,10 +41,10 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "CDR test lab :: SSH audit-session emulation :: session=$SESSION"
+say "Northline :: SSH audit-session emulation :: session=$SESSION"
 
 if ! command -v sshpass >/dev/null 2>&1; then
-    say "!! sshpass not installed. run: bash test-scripts/install-extra-tools.sh"
+    say "!! sshpass not installed. run: bash playbooks/install-extra-tools.sh"
     exit 1
 fi
 
@@ -58,7 +58,7 @@ say "internal-host resolved to $TARGET_IP"
 step "opening one SSH session and running the audit-worthy command sequence (ATT&CK T1021.004)"
 # One SSH connection, one remote `bash -s` reading the whole command
 # sequence from stdin: a single session containing multiple commands, the
-# thing we're testing audit capture of. sudo here requires a password
+# thing we're exercising audit capture of. sudo here requires a password
 # (sudo -l above confirmed no NOPASSWD rule), so each privileged command
 # pipes it in via `sudo -S` rather than needing a real terminal. The
 # heredoc delimiter is intentionally unquoted so $SSH_PASS expands locally

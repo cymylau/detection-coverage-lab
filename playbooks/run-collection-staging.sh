@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# simulate-collection-staging.sh
+# run-collection-staging.sh
 # ---------------------------------------------------------------------------
-# EDR DETECTION TEST — LAB USE ONLY
+# EDR DETECTION COVERAGE — NON-PRODUCTION USE ONLY
 #
 # Emulates bulk collection of "sensitive" files into a staged archive ahead
 # of exfiltration. Operates only on decoy documents created by
 # seed-decoys.sh — run that first. Generalizes the single base64-blob
-# staging step in simulate-metadata-exfil.sh to realistic multi-file
+# staging step in run-metadata-exfil.sh to realistic multi-file
 # archive tooling (tar/zip), which trips different detections.
 #
 #   find sensitive-looking files    Automated Collection          (T1119)
@@ -26,10 +26,10 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "EDR test lab :: collection & staging emulation :: session=$SESSION"
+say "Northline :: collection & staging emulation :: session=$SESSION"
 
 if [ ! -d "$DECOY_DIR/documents" ]; then
-    say "!! no decoys found — run: bash test-scripts/seed-decoys.sh first"
+    say "!! no decoys found — run: bash playbooks/seed-decoys.sh first"
     exit 1
 fi
 
@@ -53,7 +53,7 @@ if command -v zip >/dev/null 2>&1; then
     (cd "$RESULTS_DIR" && zip -qr "$ZIPFILE" "staged_${SESSION}") 2>&1 | tee -a "$LOG"
     say "created archive -> $ZIPFILE"
 else
-    say "(zip not installed — tar.gz only; install zip in lab-setup.sh to exercise both)"
+    say "(zip not installed — tar.gz only; install zip in bootstrap.sh to exercise both)"
 fi
 
 step "Done — collection & staging emulation complete."

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Mock C2 server for the cloud/container EDR (CDR) test lab.
+Command-and-control relay for the cloud/container EDR (CDR) detection-coverage environment.
 
 A minimal HTTP server that stands in for an attacker-controlled command and
 control server, purely to give beacon/exfil emulation scripts a destination
-inside the lab network. It never reaches, proxies to, or is reachable from
-anything outside the lab's `labnet` bridge. All "tasking" is a hardcoded
+inside the environment's network. It never reaches, proxies to, or is reachable from
+anything outside the environment's `northline-net` bridge. All "tasking" is a hardcoded
 harmless string; nothing it returns is ever executed as a privileged or
 persistent action unless a scenario script explicitly says so, and when it
 does, it is always a no-op decoy command run only inside the ephemeral
@@ -15,13 +15,13 @@ Endpoints:
   GET  /beacon             -- check-in; logs source + headers, returns a task
   POST /task-result        -- scenario posts back a decoy "result"
   POST /exfil              -- scenario POSTs a decoy archive here (HTTPS-exfil emulation)
-  GET  /pool/getwork       -- mock mining-pool work request (resource-hijack emulation)
-  POST /pool/submit        -- mock mining-pool share submission
-  POST /cloud/identity     -- mock cloud/K8s token-exchange endpoint; logs any bearer
+  GET  /pool/getwork       -- decoy mining-pool work request (resource-hijack emulation)
+  POST /pool/submit        -- decoy mining-pool share submission
+  POST /cloud/identity     -- decoy cloud/K8s token-exchange endpoint; logs any bearer
                                token presented (workload-identity-theft emulation)
-  POST /logging/disable    -- mock cloud audit-log control-plane call (impair-logging
+  POST /logging/disable    -- decoy cloud audit-log control-plane call (impair-logging
                                emulation); never actually disables anything real
-  GET  /logging/status     -- reports the mock's own (in-memory only) logging flag
+  GET  /logging/status     -- reports the relay's own (in-memory only) logging flag
 """
 import json
 import os
@@ -32,29 +32,29 @@ BIND_ADDR = os.environ.get("C2_BIND", "0.0.0.0")
 BIND_PORT = int(os.environ.get("C2_PORT", "8443"))
 RESULTS_DIR = os.environ.get("RESULTS_DIR", "/home/root/results")
 
-# The only "task" this mock C2 ever hands out: an explicitly harmless,
+# The only "task" this relay ever hands out: an explicitly harmless,
 # no-op decoy command. Scenario scripts may choose to run it to demonstrate
 # C2-directed execution, but it does nothing beyond writing a log line.
 DECOY_TASK = {
-    "task_id": "lab-decoy-task-0001",
-    "command": "echo edr-lab-c2-decoy-task-executed",
+    "task_id": "decoy-task-0001",
+    "command": "echo decoy-task-executed",
 }
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
-BEACON_LOG = os.path.join(RESULTS_DIR, "mock_c2_beacons.log")
+BEACON_LOG = os.path.join(RESULTS_DIR, "control_api_beacons.log")
 EXFIL_DIR = os.path.join(RESULTS_DIR, "c2_exfil_received")
 os.makedirs(EXFIL_DIR, exist_ok=True)
 
 # In-memory only — never a real control-plane setting. Lets
-# simulate-impair-logging.sh demonstrate "disable logging then act" sequencing
-# against a mock, with no effect on anything outside this process.
+# run-impair-logging.sh demonstrate "disable logging then act" sequencing
+# against this relay, with no effect on anything outside this process.
 _mock_state = {"logging_enabled": True}
 
 
 def log(line: str):
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     entry = f"[{stamp}] {line}"
-    print(f"[mock-c2] {entry}", flush=True)
+    print(f"[control-api] {entry}", flush=True)
     with open(BEACON_LOG, "a") as f:
         f.write(entry + "\n")
 
@@ -75,7 +75,7 @@ class C2Handler(BaseHTTPRequestHandler):
             self._send_json({"status": "ok", "task": DECOY_TASK})
         elif self.path.startswith("/pool/getwork"):
             log(f"mining-pool getwork from {self.client_address[0]} path={self.path}")
-            self._send_json({"job_id": "lab-decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
+            self._send_json({"job_id": "decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
         elif self.path.startswith("/logging/status"):
             self._send_json({"logging_enabled": _mock_state["logging_enabled"]})
         else:
@@ -101,11 +101,11 @@ class C2Handler(BaseHTTPRequestHandler):
             auth = self.headers.get("Authorization", "-")
             log(f"cloud/K8s identity-exchange call from {self.client_address[0]} "
                 f"Authorization='{auth[:80]}' body={body[:200]!r}")
-            self._send_json({"status": "ok", "decoy_session_token": "LAB-DECOY-EXCHANGED-TOKEN-NOT-REAL"})
+            self._send_json({"status": "ok", "decoy_session_token": "DECOY-EXCHANGED-TOKEN-NOT-REAL"})
         elif self.path.startswith("/logging/disable"):
             _mock_state["logging_enabled"] = False
             log(f"!! logging/disable call from {self.client_address[0]} — "
-                f"mock audit-log state set to disabled (in-memory only, nothing real affected)")
+                f"decoy audit-log state set to disabled (in-memory only, nothing real affected)")
             self._send_json({"status": "ok", "logging_enabled": False})
         else:
             self.send_error(404, "Not Found")
@@ -115,6 +115,6 @@ class C2Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    log(f"mock C2 listening on {BIND_ADDR}:{BIND_PORT} (lab-only, decoy tasking)")
+    log(f"control-api listening on {BIND_ADDR}:{BIND_PORT} (decoy tasking only)")
     server = ThreadingHTTPServer((BIND_ADDR, BIND_PORT), C2Handler)
     server.serve_forever()
