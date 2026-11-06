@@ -19,7 +19,7 @@ set -u
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 INTERNAL_HOST="${INTERNAL_HOST:-internal-host}"
-LAB_SUBNET="${LAB_SUBNET:-}"  # optional, e.g. 172.20.0.0/24 — else resolve+scan single host
+TARGET_SUBNET="${TARGET_SUBNET:-}"  # optional, e.g. 172.20.0.0/24 — else resolve+scan single host
 SSH_USER="${INTERNAL_HOST_USER:-decoyuser}"
 SSH_PASS="${INTERNAL_HOST_PASS:-DECOY-NOT-REAL-PASSWORD}"
 SSH_PORT="${INTERNAL_HOST_SSH_PORT:-2222}"  # linuxserver/openssh-server listens on 2222, not 22

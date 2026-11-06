@@ -48,7 +48,7 @@ os.makedirs(EXFIL_DIR, exist_ok=True)
 # In-memory only — never a real control-plane setting. Lets
 # run-impair-logging.sh demonstrate "disable logging then act" sequencing
 # against this relay, with no effect on anything outside this process.
-_mock_state = {"logging_enabled": True}
+_relay_state = {"logging_enabled": True}
 
 
 def log(line: str):
@@ -77,7 +77,7 @@ class C2Handler(BaseHTTPRequestHandler):
             log(f"mining-pool getwork from {self.client_address[0]} path={self.path}")
             self._send_json({"job_id": "decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
         elif self.path.startswith("/logging/status"):
-            self._send_json({"logging_enabled": _mock_state["logging_enabled"]})
+            self._send_json({"logging_enabled": _relay_state["logging_enabled"]})
         else:
             self.send_error(404, "Not Found")
 
@@ -103,7 +103,7 @@ class C2Handler(BaseHTTPRequestHandler):
                 f"Authorization='{auth[:80]}' body={body[:200]!r}")
             self._send_json({"status": "ok", "decoy_session_token": "DECOY-EXCHANGED-TOKEN-NOT-REAL"})
         elif self.path.startswith("/logging/disable"):
-            _mock_state["logging_enabled"] = False
+            _relay_state["logging_enabled"] = False
             log(f"!! logging/disable call from {self.client_address[0]} — "
                 f"decoy audit-log state set to disabled (in-memory only, nothing real affected)")
             self._send_json({"status": "ok", "logging_enabled": False})

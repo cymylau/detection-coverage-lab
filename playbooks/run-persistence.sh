@@ -21,7 +21,7 @@ set -u
 HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
 MARKER="# northline-persistence-decoy"
-DECOY_SCRIPT="${HOME_DIR}/.edr_lab_decoy_payload.sh"
+DECOY_SCRIPT="${HOME_DIR}/.edr_decoy_payload.sh"
 UNIT_DIR="${HOME_DIR}/.config/systemd/user"
 UNIT_FILE="${UNIT_DIR}/northline-decoy.service"
 

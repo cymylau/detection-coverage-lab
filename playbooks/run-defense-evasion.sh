@@ -19,7 +19,7 @@ HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/evasion_${SESSION}.log"
-MASQ_PATH="/tmp/.edr_lab_svchost_decoy"
+MASQ_PATH="/tmp/.edr_svchost_decoy"
 
 mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
