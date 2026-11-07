@@ -1,7 +1,6 @@
 T1003.008	OS Credential Dumping: /etc/passwd and /etc/shadow
 T1021.004	Remote Services: SSH
 T1033	System Owner/User Discovery
-T1036	Masquerading
 T1036.003	Masquerading: Rename System Utilities
 T1041	Exfiltration Over C2 Channel
 T1046	Network Service Discovery
@@ -9,14 +8,12 @@ T1048.003	Exfiltration Over Alternative Protocol
 T1053.003	Scheduled Task/Job: Cron
 T1059	Command and Scripting Interpreter
 T1069.001	Permission Groups Discovery: Local Groups
-T1070.002	Indicator Removal: Clear Linux or Mac System Logs
 T1070.003	Indicator Removal: Clear Command History
 T1070.004	Indicator Removal: File Deletion
 T1070.006	Indicator Removal: Timestomp
 T1071.001	Application Layer Protocol: Web Protocols
 T1082	System Information Discovery
 T1087.001	Account Discovery: Local Account
-T1105	Ingress Tool Transfer
 T1119	Automated Collection
 T1496	Resource Hijacking
 T1528	Steal Application Access Token
@@ -31,7 +28,6 @@ T1552.007	Unsecured Credentials: Container API
 T1555.003	Credentials from Password Stores: Credentials from Web Browsers
 T1560.001	Archive Collected Data: Archive via Utility
 T1562.008	Impair Defenses: Disable Cloud Logs
-T1573	Encrypted Channel
 T1609	Container Administration Command
 T1611	Escape to Host
 T1613	Container and Resource Discovery

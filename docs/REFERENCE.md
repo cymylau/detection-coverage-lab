@@ -183,18 +183,8 @@ docker compose exec ops-console bash playbooks/run-owasp-top10.sh A01 A05  # sel
 STEALTH=quiet ...                                                          # honours stealth profiles
 ```
 
-| | category | what is exercised |
-|---|---|---|
-| A01 | Broken Access Control | IDOR, unauthenticated admin export, path traversal, SSRF to the decoy IMDS (chains into the metadata-theft scenario) |
-| A02 | Security Misconfiguration | debug endpoint, exposed `.env`, directory listing, verbose errors, open CORS |
-| A03 | Software Supply Chain Failures | fetch and load of an unsigned package from an arbitrary URL |
-| A04 | Cryptographic Failures | cleartext login, unsalted MD5, forged session token |
-| A05 | Injection | SQL injection, command injection, stored XSS |
-| A06 | Insecure Design | unlimited coupon use, negative quantity, reset-code brute force |
-| A07 | Authentication Failures | default credentials, credential stuffing, no lockout, session fixation |
-| A08 | Software or Data Integrity Failures | unsafe pickle deserialization, unsigned update accepted |
-| A09 | Security Logging and Alerting Failures | actions the app never logs, log injection |
-| A10 | Mishandling of Exceptional Conditions | stack-trace leak, fail-open authorization |
+The ten categories and the tests run for each are listed in the
+[README](../README.md#every-test-in-this-lab).
 
 Ground truth for what the app really did is `results/webapp_events.jsonl`
 (category, vulnerability, endpoint, client); the app's own deliberately weak
@@ -203,52 +193,14 @@ log is `results/webapp_app.log`; the playbook's steps go to
 visible from a single request. Others (A02, A03, A06, A09, A10) are design or
 configuration weaknesses, so what a sensor sees is the exploitation traffic,
 not the weakness itself: read a missing alert there with that in mind.
-Category names follow the OWASP Top 10:2025 list; check
-[owasp.org](https://owasp.org/Top10/) for the current wording.
+Category names and links were checked against the published
+[OWASP Top 10:2025](https://owasp.org/Top10/2025/) list.
 
 ## MITRE ATT&CK coverage
 
-One row per technique, grouped by tactic in standard ATT&CK order, so
-this can be checked off against a vendor's own detection-coverage matrix
-or an ATT&CK Navigator layer. Each script's own header has the full
-rationale. Scripts marked (overlay) need `compose.privileged.yml`.
-
-| Tactic | Technique ID | Technique | Script |
-|---|---|---|---|
-| Execution | T1059 | Command and Scripting Interpreter | `run-c2-beacon.sh` |
-| Execution | T1609 | Container Administration Command | `run-docker-socket-escape.sh` (overlay) |
-| Persistence | T1053.003 | Scheduled Task/Job: Cron | `run-persistence.sh` |
-| Persistence | T1543.002 | Create or Modify System Process: Systemd Service | `run-persistence.sh` |
-| Persistence | T1546.004 | Event Triggered Execution: Unix Shell Configuration Modification | `run-persistence.sh` |
-| Privilege Escalation | T1548.001 | Abuse Elevation Control Mechanism: Setuid and Setgid Binaries | `run-host-recon.sh` |
-| Privilege Escalation | T1548.003 | Abuse Elevation Control Mechanism: Sudo and Sudo Caching | `run-ssh-audit-session.sh` |
-| Privilege Escalation | T1611 | Escape to Host | `run-docker-socket-escape.sh`, `run-privileged-container-abuse.sh` (overlay) |
-| Defense Evasion | T1036.003 | Masquerading: Rename System Utilities | `run-defense-evasion.sh` |
-| Defense Evasion | T1070.006 | Indicator Removal: Timestomp | `run-defense-evasion.sh` |
-| Defense Evasion | T1070.003 | Indicator Removal: Clear Command History | `run-defense-evasion.sh` |
-| Defense Evasion | T1562.008 | Impair Defenses: Disable Cloud Logs | `run-impair-logging.sh` |
-| Credential Access | T1552.004 | Unsecured Credentials: Private Keys | `run-credential-discovery.sh` |
-| Credential Access | T1552.001 | Unsecured Credentials: Credentials In Files | `run-credential-discovery.sh`, `run-ssh-audit-session.sh` |
-| Credential Access | T1555.003 | Credentials from Password Stores: Credentials from Web Browsers | `run-credential-discovery.sh` |
-| Credential Access | T1552.005 | Unsecured Credentials: Cloud Instance Metadata API | `run-metadata-exfil.sh` |
-| Credential Access | T1552.007 | Unsecured Credentials: Container API | `run-workload-identity-theft.sh`, `run-image-secret-discovery.sh` (overlay) |
-| Credential Access | T1528 | Steal Application Access Token | `run-workload-identity-theft.sh` |
-| Credential Access | T1003.008 | OS Credential Dumping: /etc/passwd and /etc/shadow | `run-ssh-audit-session.sh` |
-| Discovery | T1033 | System Owner/User Discovery | `run-host-recon.sh` |
-| Discovery | T1082 | System Information Discovery | `run-host-recon.sh` |
-| Discovery | T1087.001 | Account Discovery: Local Account | `run-host-recon.sh` |
-| Discovery | T1069.001 | Permission Groups Discovery: Local Groups | `run-host-recon.sh` |
-| Discovery | T1046 | Network Service Discovery | `run-metadata-exfil.sh`, `run-lateral-movement.sh` |
-| Discovery | T1613 | Container and Resource Discovery | `run-image-secret-discovery.sh` (overlay) |
-| Lateral Movement | T1021.004 | Remote Services: SSH | `run-lateral-movement.sh`, `run-ssh-audit-session.sh` |
-| Collection | T1119 | Automated Collection | `run-collection-staging.sh` |
-| Collection | T1560.001 | Archive Collected Data: Archive via Utility | `run-metadata-exfil.sh`, `run-collection-staging.sh` |
-| Command and Control | T1071.001 | Application Layer Protocol: Web Protocols | `run-c2-beacon.sh` |
-| Command and Control | T1573 | Encrypted Channel | `run-c2-beacon.sh` |
-| Command and Control | T1105 | Ingress Tool Transfer | `run-c2-beacon.sh` |
-| Exfiltration | T1048.003 | Exfiltration Over Alternative Protocol | `run-metadata-exfil.sh` |
-| Exfiltration | T1041 | Exfiltration Over C2 Channel | `run-https-exfil.sh` |
-| Impact | T1496 | Resource Hijacking | `run-cryptomining.sh` (overlay) |
+The complete, linked list of techniques and the scripts that run them is the last
+section of the [README](../README.md#every-test-in-this-lab); it is built from
+what the scripts actually record.
 
 Setup/orchestration scripts, not mapped to a technique:
 
