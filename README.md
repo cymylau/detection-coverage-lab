@@ -65,6 +65,8 @@ control. Provided as-is, with no warranty; you run it at your own risk
 | `services/metadata_api.py` | decoy cloud instance-metadata service, serves decoy IAM creds |
 | `services/dns_sink.py` | DNS sink; logs queries, reassembles DNS-tunnel exfil |
 | `services/control_api.py` | decoy C2/cloud API: beacon/tasking, mining-pool, cloud-identity, and logging-control endpoints |
+| `playbooks/lib-stealth.sh` | stealth profile definitions and helpers (see "Stealth profiles") |
+| `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `lock-down-network.sh` | host-side: removes the setup-phase egress network so scenarios run with no internet access (`run-everything.sh` calls it for you) |
 | `playbooks/` | setup + one script per scenario (table below) |
 
@@ -88,6 +90,37 @@ overlay, start to finish, logging a consolidated timeline per stage to
 When it finishes, it prints the teardown command:
 `docker compose -f compose.yml -f compose.privileged.yml down`. Run it,
 then delete the VM.
+
+## Stealth profiles
+
+The lab is noisy by default so detections fire. Stealth profiles let you
+run the **same decoy scenarios more quietly**, to check whether your
+EDR/CDR still detects a careful attacker.
+
+```bash
+bash run-everything.sh --stealth quiet          # or STEALTH=quiet ...
+docker compose exec ops-console bash playbooks/run-stealth-sweep.sh   # all four, side by side
+STEALTH_TIME_SCALE=0.01 ...                      # shrink every wait for quick demos
+```
+
+| profile | timing | tooling | artifacts |
+|---|---|---|---|
+| `noisy` (default) | 1-4 s beacon jitter, no DNS delay | `nmap`, `curl`, 48-char DNS labels, `sshpass -p`, broad `find`, full recon | obvious names, staged in `results/`, history cleared, timestomp |
+| `careful` | 5-15 s jitter, 1-2 s DNS delay | `nmap -T2` on fewer ports, realistic UA, 32-char labels, `sshpass -e`, scoped `find`/SUID search, no `env` dump | staged under `~/.cache`, quieter process name |
+| `quiet` | 30-90 s jitter, 2-5 s DNS delay, niced load | single `/dev/tcp` probe instead of `nmap`, `python3` instead of `curl`, 24-char labels, known-path credential checks, minimal recon | staging copy removed, no history-clear/timestomp |
+| `covert` | 120-300 s jitter, 5-15 s DNS delay | no port scan, 12-char labels | as `quiet`, less obvious binary name |
+
+Override one dimension with `STEALTH_TIMING`, `STEALTH_TOOLING` or
+`STEALTH_ARTIFACTS` (e.g. `STEALTH=quiet STEALTH_TOOLING=noisy`).
+Every run appends `stealth_timeline.jsonl` to the results directory
+(timestamp, profile, ATT&CK technique, step), so you can line EDR/CDR
+alerts up against exactly what ran. The profile table is in one place:
+`playbooks/lib-stealth.sh`.
+
+**Scope:** profiles only change *how* the existing decoy techniques are
+performed (timing, volume, tooling, naming, tidiness). They never stop,
+blind, unhook or modify the security agent, and every target remains a
+lab decoy.
 
 ## Finer-grained control
 

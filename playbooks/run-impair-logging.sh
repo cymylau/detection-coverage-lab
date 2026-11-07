@@ -14,6 +14,7 @@
 #   follow-on action after disabling logs  (sequencing signal for correlation)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 C2_HOST="${C2_HOST:-control-api}"
@@ -28,15 +29,19 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Northline :: impair-cloud-logging emulation :: session=$SESSION"
 
 step "check current (decoy) logging state"
-curl -s --max-time 5 "http://${C2_HOST}:${C2_PORT}/logging/status" | tee -a "$LOG"
+st_http GET "http://${C2_HOST}:${C2_PORT}/logging/status" | tee -a "$LOG"
 echo "" | tee -a "$LOG"
 
 step "impair defenses — disable decoy audit logging (ATT&CK T1562.008)"
-RESP="$(curl -s --max-time 5 -X POST "http://${C2_HOST}:${C2_PORT}/logging/disable")"
+st_mark T1562.008 "disable-decoy-logging"
+RESP="$(st_http POST "http://${C2_HOST}:${C2_PORT}/logging/disable")"
 say "disable-logging response: $RESP"
 
 step "follow-on action performed right after disabling logging (sequencing signal)"
-curl -s --max-time 5 "http://${C2_HOST}:${C2_PORT}/beacon?post_log_disable=1" | tee -a "$LOG"
+# the "gap" an attacker acts in: higher timing levels wait, then act inside the window
+J="$(st_sleep "$ST_JITTER_MIN" "$ST_JITTER_MAX")"; say "waited ${J}s (scale ${TIME_SCALE}) before acting in the logging gap"
+st_mark T1562.008 "act-in-logging-gap"
+st_http GET "http://${C2_HOST}:${C2_PORT}/beacon?post_log_disable=1" | tee -a "$LOG"
 echo "" | tee -a "$LOG"
 
 step "Done — impair-logging emulation complete."

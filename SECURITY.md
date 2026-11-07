@@ -13,6 +13,10 @@ intentional and exist only inside this throwaway environment.
 Those intentional weaknesses are **not** vulnerabilities and need no
 report.
 
+Stealth profiles (`STEALTH=...`) only make the decoy techniques quieter
+(timing, volume, tooling, naming). They never target, stop, or evade the
+security agent, and are not a vulnerability.
+
 ## Where to run it
 
 Only on a disposable machine that you will delete afterwards. See the

@@ -14,6 +14,7 @@
 #   indicator removal       clear shell history, truncate prior run logs        (T1070.003/.002)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 source "$(cd "$(dirname "$0")" && pwd)/lib-guard.sh"
 require_lab_container
@@ -22,7 +23,12 @@ HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/evasion_${SESSION}.log"
-MASQ_PATH="/tmp/.edr_svchost_decoy"
+case "$ST_ARTIFACTS" in
+    0) MASQ_PATH="/tmp/.edr_svchost_decoy" ;;                    # obvious on purpose
+    1) MASQ_PATH="/tmp/.cache-updater" ;;
+    2) MASQ_PATH="/var/tmp/dbus-launch-helper" ;;
+    *) MASQ_PATH="/var/tmp/.systemd-resolved-helper" ;;
+esac
 
 mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
@@ -38,16 +44,22 @@ wait "$MASQ_PID" 2>/dev/null
 say "ran masqueraded binary as pid $MASQ_PID, name='$(basename "$MASQ_PATH")'"
 rm -f "$MASQ_PATH"
 
-step "timestomping — backdate a decoy file's timestamp (ATT&CK T1070.006)"
-DECOY_FILE="${RESULTS_DIR}/evasion_decoy_${SESSION}.txt"
-echo "decoy file for timestomp demonstration" > "$DECOY_FILE"
-say "created $DECOY_FILE with real mtime: $(date -r "$DECOY_FILE" 2>/dev/null || stat -c %y "$DECOY_FILE")"
-touch -d "2001-01-01 00:00:00" "$DECOY_FILE"
-say "backdated mtime to 2001-01-01 -> $(date -r "$DECOY_FILE" 2>/dev/null || stat -c %y "$DECOY_FILE")"
+st_mark T1036 "masquerade"
+if [ "$ST_ARTIFACTS" -ge 2 ]; then
+    say "(artifacts level $ST_ARTIFACTS: skipping timestomp/history-clear — they are loud indicators)"
+else
+    step "timestomping — backdate a decoy file's timestamp (ATT&CK T1070.006)"
+    DECOY_FILE="${RESULTS_DIR}/evasion_decoy_${SESSION}.txt"
+    echo "decoy file for timestomp demonstration" > "$DECOY_FILE"
+    say "created $DECOY_FILE with real mtime: $(date -r "$DECOY_FILE" 2>/dev/null || stat -c %y "$DECOY_FILE")"
+    touch -d "2001-01-01 00:00:00" "$DECOY_FILE"
+    say "backdated mtime to 2001-01-01 -> $(date -r "$DECOY_FILE" 2>/dev/null || stat -c %y "$DECOY_FILE")"
 
-step "indicator removal — clear shell history (ATT&CK T1070.003)"
-history -c 2>/dev/null && say "cleared in-memory bash history" || say "(history -c not applicable in this shell)"
-: > "${HOME_DIR}/.bash_history" 2>/dev/null && say "truncated ~/.bash_history"
+    step "indicator removal — clear shell history (ATT&CK T1070.003)"
+    history -c 2>/dev/null && say "cleared in-memory bash history" || say "(history -c not applicable in this shell)"
+    : > "${HOME_DIR}/.bash_history" 2>/dev/null && say "truncated ~/.bash_history"
+
+fi
 
 step "indicator removal — touch/truncate this environment's own prior run logs (ATT&CK T1070.002, scoped to this environment only)"
 OLDEST_LOG="$(find "$RESULTS_DIR" -maxdepth 1 -name 'run_*.log' ! -name "*${SESSION}*" | head -n1)"

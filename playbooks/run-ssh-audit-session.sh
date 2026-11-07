@@ -28,6 +28,7 @@
 #   history / who / last                    Discovery                    (T1033, T1082)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 INTERNAL_HOST="${INTERNAL_HOST:-internal-host}"
@@ -63,7 +64,9 @@ step "opening one SSH session and running the audit-worthy command sequence (ATT
 # pipes it in via `sudo -S` rather than needing a real terminal. The
 # heredoc delimiter is intentionally unquoted so $SSH_PASS expands locally
 # before the script is sent over SSH.
-TRANSCRIPT="$(sshpass -p "$SSH_PASS" ssh -p "$SSH_PORT" \
+st_mark T1021.004 "ssh-audit-session"
+st_sshpass "$SSH_PASS"
+TRANSCRIPT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" \
     -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
     "${SSH_USER}@${TARGET_IP}" bash -s 2>&1 <<REMOTE_SESSION
 echo "=== whoami / id / uname -a ==="

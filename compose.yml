@@ -22,6 +22,13 @@ services:
       # Playbooks that touch ~/.ssh, ~/.aws, ~/.bashrc, crontab etc. refuse to
       # run unless this is set (see playbooks/lib-guard.sh).
       - LAB_CONTAINER=1
+      # Stealth profile for the scenarios: noisy (default) | careful | quiet | covert.
+      # See README "Stealth profiles". Set on the host, e.g. STEALTH=quiet docker compose up -d
+      - STEALTH=${STEALTH:-noisy}
+      - STEALTH_TIME_SCALE=${STEALTH_TIME_SCALE:-1}
+      - STEALTH_TIMING=${STEALTH_TIMING:-}
+      - STEALTH_TOOLING=${STEALTH_TOOLING:-}
+      - STEALTH_ARTIFACTS=${STEALTH_ARTIFACTS:-}
       - METADATA_IP=169.254.169.254
       - EXFIL_DOMAIN=exfil.internal
       - DNS_SINK=dns-sink

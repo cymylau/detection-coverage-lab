@@ -14,6 +14,7 @@
 #   read browser-login store        Credentials from password stores  (T1555.003)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
@@ -31,21 +32,36 @@ if [ ! -f "${HOME_DIR}/.ssh/id_rsa" ] && [ ! -f "${HOME_DIR}/.aws/credentials" ]
 fi
 
 step "SSH private key discovery (ATT&CK T1552.004)"
-find "$HOME_DIR" -maxdepth 3 -iname 'id_rsa*' -o -iname '*.pem' 2>/dev/null | tee -a "$LOG"
+st_mark T1552.004 "ssh-key-discovery"
+case "$ST_TOOLING" in
+    0) find "$HOME_DIR" -maxdepth 3 -iname 'id_rsa*' -o -iname '*.pem' 2>/dev/null | tee -a "$LOG" ;;
+    1) find "$HOME_DIR/.ssh" -maxdepth 1 -iname 'id_*' 2>/dev/null | tee -a "$LOG" ;;
+    *) [ -e "$HOME_DIR/.ssh/id_rsa" ] && echo "$HOME_DIR/.ssh/id_rsa" | tee -a "$LOG" ;;  # known path, no filesystem search
+esac
 if [ -f "${HOME_DIR}/.ssh/id_rsa" ]; then
     say "reading discovered key: ${HOME_DIR}/.ssh/id_rsa"
     cat "${HOME_DIR}/.ssh/id_rsa" > /dev/null  # read access is the signal; content not needed
 fi
 
 step "cloud credential file discovery (ATT&CK T1552.001)"
-find "$HOME_DIR" -maxdepth 3 -iname 'credentials' -path '*.aws*' 2>/dev/null | tee -a "$LOG"
+st_mark T1552.001 "cloud-cred-discovery"
+case "$ST_TOOLING" in
+    0) find "$HOME_DIR" -maxdepth 3 -iname 'credentials' -path '*.aws*' 2>/dev/null | tee -a "$LOG" ;;
+    1) find "$HOME_DIR/.aws" -maxdepth 1 -iname 'credentials' 2>/dev/null | tee -a "$LOG" ;;
+    *) [ -e "$HOME_DIR/.aws/credentials" ] && echo "$HOME_DIR/.aws/credentials" | tee -a "$LOG" ;;
+esac
 if [ -f "${HOME_DIR}/.aws/credentials" ]; then
     say "reading discovered cloud credentials: ${HOME_DIR}/.aws/credentials"
     grep -i 'key' "${HOME_DIR}/.aws/credentials" | tee -a "$LOG"
 fi
 
 step "browser credential store discovery (ATT&CK T1555.003)"
-find "$HOME_DIR" -maxdepth 3 -iname 'logins.sqlite' -o -iname '*Login Data*' 2>/dev/null | tee -a "$LOG"
+st_mark T1555.003 "browser-cred-discovery"
+case "$ST_TOOLING" in
+    0) find "$HOME_DIR" -maxdepth 3 -iname 'logins.sqlite' -o -iname '*Login Data*' 2>/dev/null | tee -a "$LOG" ;;
+    1) find "$HOME_DIR/.mozilla_decoy" -maxdepth 1 -iname 'logins.sqlite' 2>/dev/null | tee -a "$LOG" ;;
+    *) [ -e "$HOME_DIR/.mozilla_decoy/logins.sqlite" ] && echo "$HOME_DIR/.mozilla_decoy/logins.sqlite" | tee -a "$LOG" ;;
+esac
 LOGIN_DB="${HOME_DIR}/.mozilla_decoy/logins.sqlite"
 if [ -f "$LOGIN_DB" ]; then
     say "reading discovered browser-credential store: $LOGIN_DB"

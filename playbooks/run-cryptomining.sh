@@ -16,6 +16,7 @@
 # Usage: DURATION=20 bash playbooks/run-cryptomining.sh
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 C2_HOST="${C2_HOST:-control-api}"
 C2_PORT="${C2_PORT:-8443}"
@@ -32,7 +33,7 @@ say "Northline :: cryptomining/resource-hijack emulation :: session=$SESSION dur
 
 step "sustained high-CPU decoy load (ATT&CK T1496)"
 if command -v openssl >/dev/null 2>&1; then
-    timeout "$DURATION" openssl speed -seconds "$DURATION" sha256 >/dev/null 2>&1 &
+    timeout "$DURATION" $ST_NICE openssl speed -seconds "$DURATION" sha256 >/dev/null 2>&1 &
 else
     ( END=$((SECONDS + DURATION)); while [ $SECONDS -lt $END ]; do :; done ) &
 fi
@@ -44,12 +45,12 @@ END=$(( $(date +%s) + DURATION ))
 i=0
 while [ "$(date +%s)" -lt "$END" ]; do
     i=$((i+1))
-    WORK="$(curl -s --max-time 5 "http://${C2_HOST}:${C2_PORT}/pool/getwork")"
+    st_mark T1496 "pool-checkin-$i"
+    WORK="$(st_http GET "http://${C2_HOST}:${C2_PORT}/pool/getwork")"
     say "pool getwork #$i -> $WORK"
-    curl -s --max-time 5 -X POST -d "job_id=decoy-job-0001 nonce=${i}" \
-        "http://${C2_HOST}:${C2_PORT}/pool/submit" >/dev/null
+    st_http POST "http://${C2_HOST}:${C2_PORT}/pool/submit" "job_id=decoy-job-0001 nonce=${i}" >/dev/null
     say "pool submit #$i sent"
-    sleep 3
+    st_sleep "$ST_POLL_MIN" "$ST_POLL_MAX" >/dev/null
 done
 
 wait "$LOAD_PID" 2>/dev/null
