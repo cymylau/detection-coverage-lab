@@ -72,7 +72,7 @@ It takes about 70 seconds once the images are cached.
 
 | File in `results/` | What it tells you |
 |---|---|
-| `activity_report.txt` | **start here**: one table of every attack action (time, technique, command, source container, destination container, path or ID), then a list of every attack covered |
+| `activity_report.txt` | **start here**: one table of every attack action (time, technique, command, source container, destination container, path or ID, and whether the destination's own logs confirm it), then a list of every attack covered |
 | `activity.csv` | the same, every row, ready for a spreadsheet or SIEM |
 | `full_chain_*.log`, `privileged_chain_*.log`, `owasp_*.log` | the detailed log of each part, with the same table at the bottom |
 | `webapp_events.jsonl` | what the vulnerable web app *really* did for each OWASP request |
@@ -208,14 +208,44 @@ bash run-everything.sh --only owasp --stealth careful  # combine the options
 The levels are `noisy` (default), `careful`, `quiet` and `covert`. Details
 are in [Stealth profiles](docs/REFERENCE.md#stealth-profiles).
 
+## Score your tool
+
+After a run, export your tool's alerts for that time window (CSV or JSON) and
+let the lab tell you what it caught:
+
+```bash
+python3 playbooks/detection-report.py --alerts path/to/alerts.csv \
+    --csv results/detection_detail.csv --layer results/attack_layer.json
+```
+
+You get a table of every technique as detected, partial or missed, and an
+ATT&CK Navigator layer (green, amber, red) to load at
+<https://mitre-attack.github.io/attack-navigator/>. How the matching works is in
+[Scoring your tool](docs/REFERENCE.md#scoring-your-tool).
+
+## Just one technique?
+
+Re-test a single detection after tuning a rule:
+
+```bash
+bash run-everything.sh --list                      # every technique, its tactic and its scripts
+bash run-everything.sh --technique T1552.005       # the scenario that performs it
+bash run-everything.sh --tactic credential-access  # every scenario for a tactic
+```
+
+This runs the whole script that performs the technique, which may perform
+neighbouring ones too.
+
 ## Something went wrong?
 
-- **A run stopped half-way:** run the clean-up command for your
-  walkthrough, then run the walkthrough again from the start.
-- **A name conflict with existing `northline-*` containers:** an earlier
-  lab is still running. Take it down with the same clean-up command.
-- **Permission denied on `results/`:** it was created by a container as
-  root in an earlier run. Remove it with `sudo rm -rf results`.
+- **Check your machine first:** `bash run-everything.sh --check` tests for
+  Docker, the Compose plugin, Python, disk space and name clashes, and says
+  what to fix. The same checks run automatically before every run.
+- **A run stopped half-way:** `bash run-everything.sh --down` removes the lab,
+  then run the walkthrough again. `bash run-everything.sh --reset` also clears
+  `./results` (it asks first).
+- **A name conflict with `northline-*` containers:** an earlier lab is still
+  running. `--down` removes it, or the preflight shows the exact command.
 
 ## Advanced use
 

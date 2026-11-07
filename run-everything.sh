@@ -12,6 +12,9 @@
 #   bash run-everything.sh --only untrusted-fields   # untrusted telemetry-field handling (opt-in, not part of the default run)
 #   bash run-everything.sh --stealth quiet    # quieter attacker: noisy|careful|quiet|covert
 #
+#   bash run-everything.sh --technique T1552.005    # just the scenario(s) that perform a technique
+#   bash run-everything.sh --tactic credential-access
+#   bash run-everything.sh --list                   # every technique, its tactic and its scripts
 #   bash run-everything.sh --check            # preflight checks only, start nothing
 #   bash run-everything.sh --down             # stop and remove the lab's containers and networks
 #   bash run-everything.sh --reset [--yes]    # --down, then delete ./results (asks first unless --yes)
@@ -26,9 +29,15 @@
 # ---------------------------------------------------------------------------
 set -eu
 
+SEL_TECH=(); SEL_TACTIC=(); DO_LIST=0
 ONLY=all; DO_CHECK=0; DO_DOWN=0; DO_RESET=0; ASSUME_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
+        --technique) [ $# -ge 2 ] || { echo "--technique needs a value" >&2; exit 2; }; SEL_TECH+=("$2"); shift 2 ;;
+        --technique=*) SEL_TECH+=("${1#*=}"); shift ;;
+        --tactic) [ $# -ge 2 ] || { echo "--tactic needs a value" >&2; exit 2; }; SEL_TACTIC+=("$2"); shift 2 ;;
+        --tactic=*) SEL_TACTIC+=("${1#*=}"); shift ;;
+        --list) DO_LIST=1; shift ;;
         --check) DO_CHECK=1; shift ;;
         --down) DO_DOWN=1; shift ;;
         --reset) DO_RESET=1; shift ;;
@@ -37,7 +46,7 @@ while [ $# -gt 0 ]; do
         --stealth=*) export STEALTH="${1#*=}"; shift ;;
         --only) [ $# -ge 2 ] || { echo "--only needs a value" >&2; exit 2; }; ONLY="$2"; shift 2 ;;
         --only=*) ONLY="${1#*=}"; shift ;;
-        -h|--help) sed -n 2,26p "$0"; exit 0 ;;
+        -h|--help) sed -n 2,30p "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -48,6 +57,20 @@ case "$ONLY" in all|mitre|owasp|untrusted-fields) ;; *)
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
+
+if [ "$DO_LIST" = 1 ]; then exec python3 playbooks/scenario-index.py list; fi
+
+# --technique / --tactic: work out which scenario scripts to run
+PLAN=""; NEED_OVERLAY=0
+if [ ${#SEL_TECH[@]} -gt 0 ] || [ ${#SEL_TACTIC[@]} -gt 0 ]; then
+    [ "$ONLY" = all ] || { echo "--technique/--tactic cannot be combined with --only" >&2; exit 2; }
+    sel_args=()
+    for x in ${SEL_TECH[@]+"${SEL_TECH[@]}"}; do sel_args+=(--technique "$x"); done
+    for x in ${SEL_TACTIC[@]+"${SEL_TACTIC[@]}"}; do sel_args+=(--tactic "$x"); done
+    PLAN="$(python3 playbooks/scenario-index.py select "${sel_args[@]}")" || exit 2
+    ONLY=select
+    case "$PLAN" in *overlay=1*) NEED_OVERLAY=1 ;; esac
+fi
 
 FILES="-f compose.yml -f compose.privileged.yml"
 PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-')}"
@@ -125,7 +148,7 @@ echo
 # Create results/ as the invoking user (otherwise Docker creates it as root).
 mkdir -p results
 
-if [ "$ONLY" = owasp ] || [ "$ONLY" = untrusted-fields ]; then
+if [ "$ONLY" = owasp ] || [ "$ONLY" = untrusted-fields ] || { [ "$ONLY" = select ] && [ "$NEED_OVERLAY" = 0 ]; }; then
     COMPOSE="docker compose -f compose.yml"
     WHAT="base containers only"
 else
@@ -150,7 +173,7 @@ $COMPOSE exec ops-console bash playbooks/bootstrap.sh
 if [ "$ONLY" != owasp ]; then
     $COMPOSE exec ops-console bash playbooks/install-extra-tools.sh
 fi
-if [ "$ONLY" != owasp ] && [ "$ONLY" != untrusted-fields ]; then
+if [ "$ONLY" != owasp ] && [ "$ONLY" != untrusted-fields ] && { [ "$ONLY" != select ] || [ "$NEED_OVERLAY" = 1 ]; }; then
     $COMPOSE exec ops-console bash playbooks/install-container-tools.sh
 fi
 
@@ -160,6 +183,19 @@ COMPOSE="$COMPOSE" bash lock-down-network.sh
 if [ "$ONLY" = owasp ]; then
     echo "[run-everything] OWASP Top 10:2025 scenarios..."
     $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-owasp-top10.sh
+elif [ "$ONLY" = select ]; then
+    echo "[run-everything] selected scenarios:"
+    printf '%s\n' "$PLAN" | sed 's/ ;; .*//; s/^/    /'
+    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/seed-decoys.sh
+    while IFS= read -r line; do
+        spec="${line%% ;; *}"; flags="${line#* ;; }"
+        echo "[run-everything] running: $spec"
+        # shellcheck disable=SC2086  (spec is "script.sh [args]", intentionally word-split)
+        # -T and </dev/null: otherwise exec reads (and swallows) the rest of $PLAN from the loop's stdin
+        $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/$spec </dev/null
+        case "$flags" in *persistence=1*)
+            [ "${KEEP_PERSISTENCE:-0}" = 1 ] || $COMPOSE exec -T ops-console bash playbooks/run-persistence.sh --cleanup </dev/null ;; esac
+    done <<< "$PLAN"
 elif [ "$ONLY" = untrusted-fields ]; then
     echo "[run-everything] untrusted-field handling scenario..."
     $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-untrusted-fields.sh

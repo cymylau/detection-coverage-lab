@@ -62,7 +62,7 @@ def main():
     texts = read_texts(a.tool_output)
     names = {}
     try:
-        names = dict(l.rstrip("\n").split("\t", 1) for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "techniques.tsv")))
+        names = {p[0]: p[1] for p in (l.rstrip("\n").split("\t") for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "techniques.tsv"))) if len(p) > 1}
     except OSError:
         pass
 

@@ -18,9 +18,9 @@ def load_names():
     names = {}
     try:
         for line in open(os.path.join(HERE, "techniques.tsv")):
-            k, _, v = line.rstrip("\n").partition("\t")
-            if k:
-                names[k] = v
+            parts = line.rstrip("\n").split("\t")
+            if parts[0] and len(parts) > 1:
+                names[parts[0]] = parts[1]
     except OSError:
         pass
     return names

@@ -2,7 +2,7 @@
 
 Everything beyond the quick-start guide in the [README](../README.md).
 
-Contents: [The activity log](#the-activity-log) · [Untrusted-field handling](#untrusted-field-handling) · [Safety design](#safety-design) · [Components](#components) ·
+Contents: [The activity log](#the-activity-log) · [Untrusted-field handling](#untrusted-field-handling) · [Scoring your tool](#scoring-your-tool) · [Destination confirmation](#destination-confirmation) · [One technique or tactic](#running-one-technique-or-tactic) · [Preflight and CI](#preflight-teardown-and-ci) · [Safety design](#safety-design) · [Components](#components) ·
 [Running pieces separately](#running-pieces-separately) ·
 [Stealth profiles](#stealth-profiles) ·
 [OWASP Top 10:2025 scenarios](#owasp-top-10-2025-scenarios) ·
@@ -81,6 +81,69 @@ What good looks like: attacker-controlled fields are preserved verbatim, clearly
 labelled as untrusted, never treated as instructions or as evidence about the
 activity, and the verdict does not depend on their content.
 
+## Scoring your tool
+
+`playbooks/detection-report.py --alerts EXPORT` compares an alert export from
+your EDR/CDR/WAF with the activity log and reports, per technique, whether it was
+detected, partly detected or missed.
+
+- **Input:** CSV, JSON, or JSON lines. The alert time is found by field name (`time`,
+  `timestamp`, `ts`, `_time`, `created_at`, `detected_at`, ...; ISO 8601 or epoch
+  seconds/milliseconds; no zone means UTC). Any technique IDs in the alert
+  (`T1552.005`, `OWASP-A05`, `A05:2025`, or in tags and rule names) are picked up.
+- **Match:** an alert counts for an action if its time is from 2 seconds before
+  the action to `--window` seconds after it (default 120). **Detected** means the
+  alert names the same technique (a parent such as `T1552` matches `T1552.005`).
+  **Partial** means an alert fired in the window but named no technique or a
+  different one, so it may be unrelated; confirm by hand. **Missed** means no alert.
+- **Output:** a summary table, `--csv` for per-action detail, and `--layer` for an
+  ATT&CK Navigator layer. Options: `--since EPOCH` to limit to one run.
+
+A noisy tool that fires generic alerts will show many `partial` results. Treat
+`detected` as the reliable column and review `partial` by hand.
+
+## Destination confirmation
+
+The activity log is the attacker's view. `observe.py` (run by `run-everything.sh`)
+checks each remote action against what the destination recorded, and adds a
+"Seen at dest" column to the report: `yes`, `NO` or `n/a`.
+
+The services keep timestamped `results/server_<name>.jsonl` records
+(`control-api`, `web-portal`, `dns-sink`, and the decoy metadata service as
+`imds`); sshd's auth log is saved as `results/server_sshd.log`. An action is
+confirmed if a matching record appears from 1 second before to 6 seconds after
+it. `n/a` means there is nothing to check: local actions, port scans, commands
+inside an already-confirmed SSH session, and `docker-sandbox` (no per-request
+log). `NO` is worth investigating before reading anything into a missing
+detection: the traffic may never have arrived. The result is written to
+`results/activity_confirmed.jsonl`.
+
+## Running one technique or tactic
+
+`bash run-everything.sh --technique T1552.005`, `--tactic credential-access`, or
+`--list`. `playbooks/scenario-index.py` reads the scripts' own `st_mark`/`act`
+calls to map techniques to scripts, so the mapping cannot drift from what runs.
+IDs can be ATT&CK (a parent such as `T1552` selects its sub-techniques),
+`OWASP-A05`/`A05`, or `UFLD-01`. Tactics come from the third column of
+`playbooks/techniques.tsv`. Selected scripts run in the same order as the full
+chain; the privileged sandbox starts only if a selected script needs it. It
+cannot be combined with `--only`.
+
+## Preflight, teardown and CI
+
+`run-everything.sh` checks Docker, the Compose plugin, Python, disk space and
+container-name clashes before starting (`--check` does only that). `--down`
+removes the lab; `--reset` also clears `./results` after asking (`--yes` skips
+the question).
+
+`.github/workflows/ci.yml` runs on every push and pull request: shell syntax,
+Python compile, compose validation, and `tests/check-docs.py`, which fails if the
+README's test list disagrees with what the scripts record, a technique has no
+name, or a local link or anchor is broken (`--online` also checks external
+links). A smoke job then runs the OWASP scenarios and fails if any web-app
+category was not exercised or an action never reached its destination. ShellCheck
+runs too but is informational until the scripts have been cleaned up for it.
+
 ## Safety design
 
 This lab intentionally runs attacker-style behaviour and weak
@@ -123,6 +186,10 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 | `services/webapp.py` | deliberately vulnerable decoy web app for the OWASP scenarios (`web-portal`) |
 | `playbooks/` | setup + one script per scenario |
 | `playbooks/lib-stealth.sh` | stealth profile definitions and helpers |
+| `playbooks/detection-report.py` | scores an alert export against the activity log; writes an ATT&CK Navigator layer |
+| `playbooks/observe.py` | confirms each action in the destination's own logs |
+| `playbooks/scenario-index.py` | maps techniques and tactics to scripts for `--technique` / `--tactic` |
+| `tests/check-docs.py`, `.github/workflows/ci.yml` | docs-vs-code drift check and CI |
 | `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: recording, table/CSV report, technique names |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `playbooks/run-untrusted-fields.sh`, `playbooks/untrusted-fields-report.py` | optional untrusted-telemetry-field scenario and its marker checker |
