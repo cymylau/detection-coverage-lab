@@ -60,11 +60,13 @@ control. Provided as-is, with no warranty; you run it at your own risk
 
 | | |
 |---|---|
-| `compose.yml` | base setup: `ops-console` (Kali attacker box), `dns-sink`, `control-api`, `internal-host` |
+| `compose.yml` | base setup: `ops-console` (Kali attacker box), `dns-sink`, `control-api`, `internal-host`, `web-portal` (decoy vulnerable web app) |
 | `compose.privileged.yml` | overlay adding a Docker-in-Docker sandbox for the container-escape scenarios, see its header |
 | `services/metadata_api.py` | decoy cloud instance-metadata service, serves decoy IAM creds |
 | `services/dns_sink.py` | DNS sink; logs queries, reassembles DNS-tunnel exfil |
 | `services/control_api.py` | decoy C2/cloud API: beacon/tasking, mining-pool, cloud-identity, and logging-control endpoints |
+| `services/webapp.py` | deliberately vulnerable decoy web app for the OWASP scenarios (`web-portal`) |
+| `playbooks/run-owasp-top10.sh` | OWASP Top 10:2025 application-attack scenarios |
 | `playbooks/lib-stealth.sh` | stealth profile definitions and helpers (see "Stealth profiles") |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `lock-down-network.sh` | host-side: removes the setup-phase egress network so scenarios run with no internet access (`run-everything.sh` calls it for you) |
@@ -121,6 +123,48 @@ alerts up against exactly what ran. The profile table is in one place:
 performed (timing, volume, tooling, naming, tidiness). They never stop,
 blind, unhook or modify the security agent, and every target remains a
 lab decoy.
+
+## OWASP Top 10:2025 scenarios
+
+The ATT&CK scenarios test host and cloud behaviour. These test
+**application attacks**: `run-owasp-top10.sh` drives a deliberately
+vulnerable decoy web app (`web-portal`, `services/webapp.py`) so WAF, API,
+CDR and runtime sensors have genuine application-layer telemetry to detect.
+
+The actions are real (the app really runs the SQL, shell, outbound fetch,
+file read and `pickle.loads`); the payloads are inert and `DECOY`-tagged,
+and only touch decoy data in an isolated container (internal network only,
+no published ports, no egress, command injection runs as `nobody`).
+This is a telemetry generator, not a training target.
+
+```bash
+docker compose exec ops-console bash playbooks/run-owasp-top10.sh          # all ten
+docker compose exec ops-console bash playbooks/run-owasp-top10.sh A01 A05  # selected
+STEALTH=quiet ...                                                          # honours stealth profiles
+```
+
+| | category | what is exercised |
+|---|---|---|
+| A01 | Broken Access Control | IDOR, unauthenticated admin export, path traversal, SSRF to the decoy IMDS (chains into the metadata-theft scenario) |
+| A02 | Security Misconfiguration | debug endpoint, exposed `.env`, directory listing, verbose errors, open CORS |
+| A03 | Software Supply Chain Failures | fetch and load of an unsigned package from an arbitrary URL |
+| A04 | Cryptographic Failures | cleartext login, unsalted MD5, forged session token |
+| A05 | Injection | SQL injection, command injection, stored XSS |
+| A06 | Insecure Design | unlimited coupon use, negative quantity, reset-code brute force |
+| A07 | Authentication Failures | default credentials, credential stuffing, no lockout, session fixation |
+| A08 | Software or Data Integrity Failures | unsafe pickle deserialization, unsigned update accepted |
+| A09 | Security Logging and Alerting Failures | actions the app never logs, log injection |
+| A10 | Mishandling of Exceptional Conditions | stack-trace leak, fail-open authorization |
+
+Ground truth for what the app really did is `results/webapp_events.jsonl`
+(category, vulnerability, endpoint, client); the app's own deliberately weak
+log is `results/webapp_app.log`; the playbook's steps go to
+`stealth_timeline.jsonl` as `OWASP-A0x`. Some categories (A01, A05, A07) are
+visible from a single request. Others (A02, A03, A06, A09, A10) are design or
+configuration weaknesses, so what a sensor sees is the exploitation traffic,
+not the weakness itself: read a missing alert there with that in mind.
+Category names follow the OWASP Top 10:2025 list; check
+[owasp.org](https://owasp.org/Top10/) for the current wording.
 
 ## Finer-grained control
 

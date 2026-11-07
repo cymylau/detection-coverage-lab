@@ -39,36 +39,39 @@ say "Northline :: FULL CHAIN emulation :: session=$SESSION"
 say "this orchestrates multiple independent scenario scripts — see each"
 say "script's own header for its ATT&CK technique mapping."
 
-stage "0/9 seed decoy artifacts"
+stage "0/10 seed decoy artifacts"
 bash "$HERE/seed-decoys.sh" 2>&1 | tee -a "$LOG"
 
-stage "1/9 host recon"
+stage "1/10 host recon"
 bash "$HERE/run-host-recon.sh" 2>&1 | tee -a "$LOG"
 
-stage "2/9 credential discovery"
+stage "2/10 credential discovery"
 bash "$HERE/run-credential-discovery.sh" 2>&1 | tee -a "$LOG"
 
-stage "3/9 persistence"
+stage "3/10 persistence"
 bash "$HERE/run-persistence.sh" 2>&1 | tee -a "$LOG"
 
-stage "4/9 defense evasion"
+stage "4/10 defense evasion"
 bash "$HERE/run-defense-evasion.sh" 2>&1 | tee -a "$LOG"
 
-stage "5/9 metadata theft + collection staging"
+stage "5/10 metadata theft + collection staging"
 bash "$HERE/run-metadata-exfil.sh" 2>&1 | tee -a "$LOG"
 bash "$HERE/run-collection-staging.sh" 2>&1 | tee -a "$LOG"
 
-stage "6/9 C2 beacon"
+stage "6/10 C2 beacon"
 bash "$HERE/run-c2-beacon.sh" 2>&1 | tee -a "$LOG"
 
-stage "7/9 HTTPS exfil"
+stage "7/10 HTTPS exfil"
 bash "$HERE/run-https-exfil.sh" 2>&1 | tee -a "$LOG"
 
-stage "8/9 lateral movement"
+stage "8/10 lateral movement"
 bash "$HERE/run-lateral-movement.sh" 2>&1 | tee -a "$LOG"
 
-stage "9/9 SSH audit session"
+stage "9/10 SSH audit session"
 bash "$HERE/run-ssh-audit-session.sh" 2>&1 | tee -a "$LOG"
+
+stage "10/10 OWASP Top 10:2025 application attacks"
+bash "$HERE/run-owasp-top10.sh" 2>&1 | tee -a "$LOG"
 
 if [ "${KEEP_PERSISTENCE:-0}" != "1" ]; then
     say "cleaning up persistence artifacts (set KEEP_PERSISTENCE=1 to keep them)"

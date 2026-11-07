@@ -10,6 +10,10 @@ tampering). Every credential, key, token, and document in it is a
 SSH, a privileged Docker-in-Docker daemon with no auth) are
 intentional and exist only inside this throwaway environment.
 
+The decoy web app (`web-portal`) is intentionally vulnerable (injection,
+unsafe deserialization, SSRF, and so on) and is likewise not a
+vulnerability report. It must stay on the internal network.
+
 Those intentional weaknesses are **not** vulnerabilities and need no
 report.
 

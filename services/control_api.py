@@ -21,6 +21,7 @@ Endpoints:
                                token presented (workload-identity-theft emulation)
   POST /logging/disable    -- decoy cloud audit-log control-plane call (impair-logging
                                emulation); never actually disables anything real
+  GET  /pkg/northline-utils.py -- inert decoy package (OWASP A03 supply-chain scenario)
   GET  /logging/status     -- reports the relay's own (in-memory only) logging flag
 """
 import itertools
@@ -82,6 +83,16 @@ class C2Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/pool/getwork"):
             log(f"mining-pool getwork from {self.client_address[0]} path={self.path}")
             self._send_json({"job_id": "decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
+        elif self.path.startswith("/pkg/northline-utils.py"):
+            # Decoy "package" for the OWASP A03 supply-chain scenario: unsigned,
+            # inert code. Its only effect is printing a marker line.
+            log(f"package download from {self.client_address[0]} path={self.path}")
+            code = b'print("DECOY-POSTINSTALL-EXECUTED northline-utils 9.9.9 (inert)")\n'
+            self.send_response(200)
+            self.send_header("Content-Type", "text/x-python")
+            self.send_header("Content-Length", str(len(code)))
+            self.end_headers()
+            self.wfile.write(code)
         elif self.path.startswith("/logging/status"):
             self._send_json({"logging_enabled": _relay_state["logging_enabled"]})
         else:

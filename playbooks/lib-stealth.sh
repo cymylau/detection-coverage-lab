@@ -119,7 +119,7 @@ st_http() {
         curl "${args[@]}" "$url"
     else
         python3 - "$method" "$url" "$data" "$hdr" "$out" "$to" "$ST_UA" <<'PY'
-import sys, urllib.request
+import sys, urllib.request, urllib.error
 method, url, data, hdr, out, to, ua = sys.argv[1:8]
 body = None
 if data:
@@ -130,6 +130,8 @@ if hdr:
     k, _, v = hdr.partition(":"); req.add_header(k.strip(), v.strip())
 try:
     resp = urllib.request.urlopen(req, timeout=float(to)).read()
+except urllib.error.HTTPError as e:
+    resp = e.read()   # keep 4xx/5xx bodies, like curl does
 except Exception:
     resp = b""
 if out: open(out, "wb").write(resp)

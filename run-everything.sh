@@ -69,7 +69,7 @@ $COMPOSE exec -e STEALTH="${STEALTH:-noisy}" ops-console bash playbooks/run-priv
 # Containers run as root, so everything they wrote to ./results is root-owned
 # on the host. Hand it back to the invoking user.
 echo "[run-everything] fixing ./results ownership -> $(id -u):$(id -g)..."
-for svc in ops-console dns-sink control-api; do
+for svc in ops-console dns-sink control-api web-portal; do
     $COMPOSE exec -T "$svc" chown -R "$(id -u):$(id -g)" /home/root/results || true
 done
 
