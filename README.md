@@ -1,306 +1,229 @@
-# Northline — Cloud & Container Detection Coverage Environment (EDR/CDR)
+# Northline — Detection Coverage Lab (EDR / CDR / WAF)
 
-## Author
+A self-contained, non-production environment that **generates attack
+telemetry on purpose**, so you can check whether your security tooling
+detects it. It runs entirely in Docker Compose and covers two things:
 
-The scenarios, scripts, and documentation in this repository were
-written by Claude (Anthropic), co-authored with human review and
-direction throughout. Treat it accordingly: review it before relying
-on it, the way you would any AI-authored code.
+- **MITRE ATT&CK**: attacker behaviour on hosts, containers and cloud
+  (credential theft, C2 beaconing, DNS exfiltration, container escapes,
+  log tampering, and more).
+- **OWASP Top 10:2025**: application attacks against a deliberately
+  vulnerable decoy web app (injection, broken access control, SSRF,
+  unsafe deserialization, and more).
 
----
+The actions are real; the payloads are not. Every credential, key, token
+and document is a synthetic decoy marked `DECOY`, and nothing leaves the
+lab's internal network.
 
-## Introduction
+> **Author:** the scenarios, scripts and documentation were written by
+> Claude (Anthropic), with human review and direction. Review it before
+> relying on it, as you would any AI-authored code.
 
-A self-contained, non-production environment for validating detection
-coverage against attacker behaviour targeting cloud and containerised
-platforms: the kind of telemetry a CDR (Cloud Detection & Response)
-solution is specifically built to catch, alongside the host-level
-behaviour a traditional EDR agent watches for. Runs entirely in Docker
-Compose. Every credential, key, token, and "sensitive" document used is
-a synthetic decoy; all traffic stays on the environment's internal
-`northline-net` bridge network.
+## Read this first: disposable machines only
 
-**Non-production use only, by design.** Nothing here is a real
-credential, and nothing is connected to any real account or host
-outside this environment. It reproduces attacker behaviour for
-detection-coverage validation, not a working attack — every credential,
-key, token, and document is fabricated and clearly marked `DECOY`.
+This lab runs attacker-style behaviour and weak configurations on
+purpose (a privileged Docker-in-Docker daemon with no authentication,
+passwordless sudo, a vulnerable web app). **Run it only on a throwaway
+VM that you will delete afterwards.** Never on a workstation, a shared
+server or a production system. Provided as-is, with no warranty (see
+[LICENSE](LICENSE)). To report a problem, see [SECURITY.md](SECURITY.md).
 
-## Disposable hosts only
+## What you need
 
-**Run this only on a machine you will delete afterwards. Do not leave
-it lurking.** This environment intentionally runs attacker-style behaviour and
-weak configurations: a Kali box with extra capabilities, an SSH host
-with passwordless sudo, and (with the privileged overlay) a privileged
-Docker-in-Docker daemon with no authentication. It also installs
-tooling and writes logs and decoy data as it goes.
+- A fresh Linux VM (or cloud instance) that you can delete afterwards
+- `git`, Docker Engine, and the Docker Compose plugin
+- Optional but the point: your EDR / CDR / WAF agent installed on that VM
+  **before** you run anything, so it can see what happens
 
-Recommended workflow:
-
-1. Commission a fresh VM (or cloud instance) for this.
-2. Install Docker, clone this repo, and run the scenarios.
-3. Collect what you need from `./results/` and your EDR/CDR console.
-4. Tear down (`docker compose -f compose.yml -f compose.privileged.yml
-   down -v`), then **delete the VM**.
-
-Never run it on a workstation, shared server, or production system.
-The privileged Docker-in-Docker sandbox shares the host kernel, so it is
-not a security boundary: the disposable VM is the only real isolation.
-`northline-net` is `internal: true` (no internet or host access); only the
-setup phase uses a separate `setup-net` for installs, and
-`lock-down-network.sh` removes it before scenarios run. If you run
-scenarios by hand rather than via `run-everything.sh`, run
-`bash lock-down-network.sh` after installing tools. Destructive playbooks
-refuse to run outside the `ops-console` container (`LAB_CONTAINER=1`).
-Never publish any of its ports or attach it to a network you don't
-control. Provided as-is, with no warranty; you run it at your own risk
-(see `LICENSE`). To report a problem, see `SECURITY.md`.
-
-## Components
-
-| | |
-|---|---|
-| `compose.yml` | base setup: `ops-console` (Kali attacker box), `dns-sink`, `control-api`, `internal-host`, `web-portal` (decoy vulnerable web app) |
-| `compose.privileged.yml` | overlay adding a Docker-in-Docker sandbox for the container-escape scenarios, see its header |
-| `services/metadata_api.py` | decoy cloud instance-metadata service, serves decoy IAM creds |
-| `services/dns_sink.py` | DNS sink; logs queries, reassembles DNS-tunnel exfil |
-| `services/control_api.py` | decoy C2/cloud API: beacon/tasking, mining-pool, cloud-identity, and logging-control endpoints |
-| `services/webapp.py` | deliberately vulnerable decoy web app for the OWASP scenarios (`web-portal`) |
-| `playbooks/run-owasp-top10.sh` | OWASP Top 10:2025 application-attack scenarios |
-| `playbooks/lib-stealth.sh` | stealth profile definitions and helpers (see "Stealth profiles") |
-| `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
-| `lock-down-network.sh` | host-side: removes the setup-phase egress network so scenarios run with no internet access (`run-everything.sh` calls it for you) |
-| `playbooks/` | setup + one script per scenario (table below) |
-
-## Run everything, one command
-
-On your disposable VM (see above), you need `git`, Docker, and the
-Docker Compose plugin installed. Then:
+## Get it
 
 ```bash
 git clone https://github.com/cymylau/edr-test-lab.git
 cd edr-test-lab
+```
+
+Run every command below from this folder, in your host shell (not inside
+a container). The first run also downloads the container images, which
+adds a few minutes; after that each run takes one to two minutes.
+
+---
+
+## Walkthrough 1: everything (the default)
+
+MITRE ATT&CK and OWASP Top 10 together. Start here.
+
+```bash
 bash run-everything.sh
 ```
 
-Run these from your host shell, not inside a container. The script
-drives `docker compose` itself, including the privileged overlay. It
-brings up every container, runs setup, and runs every scenario, base and
-overlay, start to finish, logging a consolidated timeline per stage to
-`./results/`.
+**What happens**
 
-When it finishes, it prints the teardown command:
-`docker compose -f compose.yml -f compose.privileged.yml down`. Run it,
-then delete the VM.
+1. Starts the lab containers, including the container-escape sandbox.
+2. Installs the attacker tooling, then cuts the lab off from the internet.
+3. Runs every ATT&CK scenario, then the OWASP Top 10 scenarios, then the
+   container-escape scenarios.
+4. Hands the results back to you in `./results/` and prints the teardown
+   command.
 
-## Stealth profiles
+**It worked if** it ends with `[run-everything] done. Results are in ./results/`.
+It takes about 70 seconds once the images are cached.
 
-The lab is noisy by default so detections fire. Stealth profiles let you
-run the **same decoy scenarios more quietly**, to check whether your
-EDR/CDR still detects a careful attacker.
+**What to look at**
 
-```bash
-bash run-everything.sh --stealth quiet          # or STEALTH=quiet ...
-docker compose exec ops-console bash playbooks/run-stealth-sweep.sh   # all four, side by side
-STEALTH_TIME_SCALE=0.01 ...                      # shrink every wait for quick demos
-```
-
-| profile | timing | tooling | artifacts |
-|---|---|---|---|
-| `noisy` (default) | 1-4 s beacon jitter, no DNS delay | `nmap`, `curl`, 48-char DNS labels, `sshpass -p`, broad `find`, full recon | obvious names, staged in `results/`, history cleared, timestomp |
-| `careful` | 5-15 s jitter, 1-2 s DNS delay | `nmap -T2` on fewer ports, realistic UA, 32-char labels, `sshpass -e`, scoped `find`/SUID search, no `env` dump | staged under `~/.cache`, quieter process name |
-| `quiet` | 30-90 s jitter, 2-5 s DNS delay, niced load | single `/dev/tcp` probe instead of `nmap`, `python3` instead of `curl`, 24-char labels, known-path credential checks, minimal recon | staging copy removed, no history-clear/timestomp |
-| `covert` | 120-300 s jitter, 5-15 s DNS delay | no port scan, 12-char labels | as `quiet`, less obvious binary name |
-
-Override one dimension with `STEALTH_TIMING`, `STEALTH_TOOLING` or
-`STEALTH_ARTIFACTS` (e.g. `STEALTH=quiet STEALTH_TOOLING=noisy`).
-Every run appends `stealth_timeline.jsonl` to the results directory
-(timestamp, profile, ATT&CK technique, step), so you can line EDR/CDR
-alerts up against exactly what ran. The profile table is in one place:
-`playbooks/lib-stealth.sh`.
-
-**Scope:** profiles only change *how* the existing decoy techniques are
-performed (timing, volume, tooling, naming, tidiness). They never stop,
-blind, unhook or modify the security agent, and every target remains a
-lab decoy.
-
-## OWASP Top 10:2025 scenarios
-
-The ATT&CK scenarios test host and cloud behaviour. These test
-**application attacks**: `run-owasp-top10.sh` drives a deliberately
-vulnerable decoy web app (`web-portal`, `services/webapp.py`) so WAF, API,
-CDR and runtime sensors have genuine application-layer telemetry to detect.
-
-The actions are real (the app really runs the SQL, shell, outbound fetch,
-file read and `pickle.loads`); the payloads are inert and `DECOY`-tagged,
-and only touch decoy data in an isolated container (internal network only,
-no published ports, no egress, command injection runs as `nobody`).
-This is a telemetry generator, not a training target.
-
-```bash
-docker compose exec ops-console bash playbooks/run-owasp-top10.sh          # all ten
-docker compose exec ops-console bash playbooks/run-owasp-top10.sh A01 A05  # selected
-STEALTH=quiet ...                                                          # honours stealth profiles
-```
-
-| | category | what is exercised |
-|---|---|---|
-| A01 | Broken Access Control | IDOR, unauthenticated admin export, path traversal, SSRF to the decoy IMDS (chains into the metadata-theft scenario) |
-| A02 | Security Misconfiguration | debug endpoint, exposed `.env`, directory listing, verbose errors, open CORS |
-| A03 | Software Supply Chain Failures | fetch and load of an unsigned package from an arbitrary URL |
-| A04 | Cryptographic Failures | cleartext login, unsalted MD5, forged session token |
-| A05 | Injection | SQL injection, command injection, stored XSS |
-| A06 | Insecure Design | unlimited coupon use, negative quantity, reset-code brute force |
-| A07 | Authentication Failures | default credentials, credential stuffing, no lockout, session fixation |
-| A08 | Software or Data Integrity Failures | unsafe pickle deserialization, unsigned update accepted |
-| A09 | Security Logging and Alerting Failures | actions the app never logs, log injection |
-| A10 | Mishandling of Exceptional Conditions | stack-trace leak, fail-open authorization |
-
-Ground truth for what the app really did is `results/webapp_events.jsonl`
-(category, vulnerability, endpoint, client); the app's own deliberately weak
-log is `results/webapp_app.log`; the playbook's steps go to
-`stealth_timeline.jsonl` as `OWASP-A0x`. Some categories (A01, A05, A07) are
-visible from a single request. Others (A02, A03, A06, A09, A10) are design or
-configuration weaknesses, so what a sensor sees is the exploitation traffic,
-not the weakness itself: read a missing alert there with that in mind.
-Category names follow the OWASP Top 10:2025 list; check
-[owasp.org](https://owasp.org/Top10/) for the current wording.
-
-## Finer-grained control
-
-Three levels, from broadest to narrowest. Each is independent: pick
-whichever matches what you want to validate.
-
-**All base scenarios:**
-
-```bash
-docker compose up -d
-docker compose exec ops-console bash playbooks/bootstrap.sh
-docker compose exec ops-console bash playbooks/install-extra-tools.sh
-docker compose exec ops-console bash playbooks/run-all.sh
-```
-
-**All overlay scenarios** (the ones marked (overlay) in the table below):
-
-```bash
-docker compose -f compose.yml -f compose.privileged.yml up -d
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/bootstrap.sh
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/install-container-tools.sh
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/run-privileged-chain.sh
-```
-
-**One scenario at a time**, against whichever of the above you brought up:
-
-```bash
-docker compose exec ops-console bash playbooks/run-host-recon.sh
-```
-
-Any scenario script can be run on its own this way, in any order, as many
-times as you like; each one is self-contained and writes its own log to
-`./results/`.
-
-## Scenario coverage (ATT&CK)
-
-One row per technique, grouped by tactic in standard ATT&CK order, so
-this can be checked off against a vendor's own detection-coverage matrix
-or an ATT&CK Navigator layer. Each script's own header has the full
-rationale. Scripts marked (overlay) need `compose.privileged.yml`.
-
-| Tactic | Technique ID | Technique | Script |
-|---|---|---|---|
-| Execution | T1059 | Command and Scripting Interpreter | `run-c2-beacon.sh` |
-| Execution | T1609 | Container Administration Command | `run-docker-socket-escape.sh` (overlay) |
-| Persistence | T1053.003 | Scheduled Task/Job: Cron | `run-persistence.sh` |
-| Persistence | T1543.002 | Create or Modify System Process: Systemd Service | `run-persistence.sh` |
-| Persistence | T1546.004 | Event Triggered Execution: Unix Shell Configuration Modification | `run-persistence.sh` |
-| Privilege Escalation | T1548.001 | Abuse Elevation Control Mechanism: Setuid and Setgid Binaries | `run-host-recon.sh` |
-| Privilege Escalation | T1548.003 | Abuse Elevation Control Mechanism: Sudo and Sudo Caching | `run-ssh-audit-session.sh` |
-| Privilege Escalation | T1611 | Escape to Host | `run-docker-socket-escape.sh`, `run-privileged-container-abuse.sh` (overlay) |
-| Defense Evasion | T1036.003 | Masquerading: Rename System Utilities | `run-defense-evasion.sh` |
-| Defense Evasion | T1070.006 | Indicator Removal: Timestomp | `run-defense-evasion.sh` |
-| Defense Evasion | T1070.003 | Indicator Removal: Clear Command History | `run-defense-evasion.sh` |
-| Defense Evasion | T1562.008 | Impair Defenses: Disable Cloud Logs | `run-impair-logging.sh` |
-| Credential Access | T1552.004 | Unsecured Credentials: Private Keys | `run-credential-discovery.sh` |
-| Credential Access | T1552.001 | Unsecured Credentials: Credentials In Files | `run-credential-discovery.sh`, `run-ssh-audit-session.sh` |
-| Credential Access | T1555.003 | Credentials from Password Stores: Credentials from Web Browsers | `run-credential-discovery.sh` |
-| Credential Access | T1552.005 | Unsecured Credentials: Cloud Instance Metadata API | `run-metadata-exfil.sh` |
-| Credential Access | T1552.007 | Unsecured Credentials: Container API | `run-workload-identity-theft.sh`, `run-image-secret-discovery.sh` (overlay) |
-| Credential Access | T1528 | Steal Application Access Token | `run-workload-identity-theft.sh` |
-| Credential Access | T1003.008 | OS Credential Dumping: /etc/passwd and /etc/shadow | `run-ssh-audit-session.sh` |
-| Discovery | T1033 | System Owner/User Discovery | `run-host-recon.sh` |
-| Discovery | T1082 | System Information Discovery | `run-host-recon.sh` |
-| Discovery | T1087.001 | Account Discovery: Local Account | `run-host-recon.sh` |
-| Discovery | T1069.001 | Permission Groups Discovery: Local Groups | `run-host-recon.sh` |
-| Discovery | T1046 | Network Service Discovery | `run-metadata-exfil.sh`, `run-lateral-movement.sh` |
-| Discovery | T1613 | Container and Resource Discovery | `run-image-secret-discovery.sh` (overlay) |
-| Lateral Movement | T1021.004 | Remote Services: SSH | `run-lateral-movement.sh`, `run-ssh-audit-session.sh` |
-| Collection | T1119 | Automated Collection | `run-collection-staging.sh` |
-| Collection | T1560.001 | Archive Collected Data: Archive via Utility | `run-metadata-exfil.sh`, `run-collection-staging.sh` |
-| Command and Control | T1071.001 | Application Layer Protocol: Web Protocols | `run-c2-beacon.sh` |
-| Command and Control | T1573 | Encrypted Channel | `run-c2-beacon.sh` |
-| Command and Control | T1105 | Ingress Tool Transfer | `run-c2-beacon.sh` |
-| Exfiltration | T1048.003 | Exfiltration Over Alternative Protocol | `run-metadata-exfil.sh` |
-| Exfiltration | T1041 | Exfiltration Over C2 Channel | `run-https-exfil.sh` |
-| Impact | T1496 | Resource Hijacking | `run-cryptomining.sh` (overlay) |
-
-Setup/orchestration scripts, not mapped to a technique:
-
-| Script | Purpose |
+| File in `results/` | What it tells you |
 |---|---|
-| `seed-decoys.sh` | plants decoy SSH key, cloud creds, browser-login store, K8s service-account token, decoy documents (prereq for several scenarios above) |
-| `run-full-chain.sh` | runs every base scenario above in one multi-stage, correlatable kill chain |
-| `run-all.sh` | setup plus `run-full-chain.sh` in one command |
-| `run-privileged-chain.sh` | runs all the overlay scenarios, plus the two cloud-native ones that need no extra privileges |
+| `stealth_timeline.jsonl` | every attack step, with a UTC timestamp and its ATT&CK or OWASP ID: line your tool's alerts up against this |
+| `full_chain_*.log` | the ATT&CK scenarios, stage by stage |
+| `privileged_chain_*.log` | the container-escape scenarios |
+| `owasp_*.log` | the OWASP requests and the web app's responses |
+| `webapp_events.jsonl` | what the vulnerable app *really* did for each OWASP request |
 
-## Artifacts
+Then open your EDR / CDR / WAF console and compare what it flagged
+against `stealth_timeline.jsonl`. Anything on the timeline that has no
+alert is a detection gap.
 
-All scenarios write to `./results/` (gitignored): per-scenario run logs,
-the decoy credential blob, the DNS sink's reassembled
-`exfil_<session>.decoded`, staged archives, and `control-api`'s beacon/pool/
-identity/logging logs.
-
-## Teardown
+**Clean up** (then delete the VM):
 
 ```bash
-docker compose down
-# or, if you brought up the privileged overlay:
-docker compose -f compose.yml -f compose.privileged.yml down
+docker compose -f compose.yml -f compose.privileged.yml down -v
 ```
+
+---
+
+## Walkthrough 2: MITRE ATT&CK only
+
+Host, container and cloud attacker behaviour, without the web app.
+
+```bash
+bash run-everything.sh --only mitre
+```
+
+**What happens:** the same as Walkthrough 1, minus the OWASP scenarios.
+It runs credential discovery, persistence, defence evasion, metadata
+theft with DNS exfiltration, C2 beaconing, lateral movement over SSH,
+cryptomining, container escapes and more.
+
+**It worked if** it ends with `[run-everything] done.` (about 70 seconds)
+and there is no `owasp_*.log` in `results/`.
+
+**What to look at:** `stealth_timeline.jsonl` (step-by-step, with ATT&CK
+technique IDs), `full_chain_*.log` and `privileged_chain_*.log`. The
+full technique list is in the
+[ATT&CK coverage table](docs/REFERENCE.md#mitre-attck-coverage), so you
+can check it against your vendor's coverage matrix.
+
+**Clean up:**
+
+```bash
+docker compose -f compose.yml -f compose.privileged.yml down -v
+```
+
+---
+
+## Walkthrough 3: OWASP Top 10 only
+
+Application attacks against the decoy web app, without the host and
+container scenarios. This is also the lightest option, because it does
+not start the privileged container-escape sandbox.
+
+```bash
+bash run-everything.sh --only owasp
+```
+
+**What happens:** starts the base containers only, installs the tooling,
+cuts off the internet, then sends real attack requests for all ten
+categories (A01 to A10) to the decoy web app `web-portal`. The app really
+runs the vulnerable code (SQL, a shell command, an outbound fetch, a file
+read, a deserialization) but every payload is inert and tagged `DECOY`.
+
+**It worked if** it ends with `[run-everything] done.` (about 30 seconds)
+and `results/webapp_events.jsonl` has events for `A01` through `A10`.
+
+**What to look at:** `owasp_*.log` (your requests and the responses),
+`webapp_events.jsonl` (ground truth for each request) and
+`stealth_timeline.jsonl`. Some categories (injection, access control,
+credential stuffing) show up in a single request. Others (misconfiguration,
+insecure design, logging failures) are weaknesses the app has rather than
+something a sensor sees, so what you can detect there is the exploitation
+traffic. The [OWASP table](docs/REFERENCE.md#owasp-top-10-2025-scenarios)
+explains each one.
+
+**Clean up:**
+
+```bash
+docker compose -f compose.yml down -v
+```
+
+---
+
+## Want it quieter?
+
+By default the lab is noisy so detections fire. To check whether your tool
+still catches a *careful* attacker, add `--stealth` to any walkthrough:
+
+```bash
+bash run-everything.sh --stealth quiet                 # everything, quieter
+bash run-everything.sh --only owasp --stealth careful  # combine the options
+```
+
+The levels are `noisy` (default), `careful`, `quiet` and `covert`. Details
+are in [Stealth profiles](docs/REFERENCE.md#stealth-profiles).
+
+## Something went wrong?
+
+- **A run stopped half-way:** run the clean-up command for your
+  walkthrough, then run the walkthrough again from the start.
+- **A name conflict with existing `northline-*` containers:** an earlier
+  lab is still running. Take it down with the same clean-up command.
+- **Permission denied on `results/`:** it was created by a container as
+  root in an earlier run. Remove it with `sudo rm -rf results`.
+
+## Advanced use
+
+Everything else is in **[docs/REFERENCE.md](docs/REFERENCE.md)**: running
+one scenario at a time, the full ATT&CK and OWASP coverage tables, stealth
+profile details, the safety design, and what every file does.
 
 ## Acknowledgements
 
-Security is a team effort, and this environment stands on a lot of
-other people's work. With thanks to:
+Security is a team effort, and this environment stands on a lot of other
+people's work. With thanks to:
 
-- **[Kali Linux](https://www.kali.org/)** and the Offensive Security
-  team and contributors, for the attacker workstation image.
-- **[MITRE ATT&CK](https://attack.mitre.org/)**, for the shared
-  vocabulary of tactics and techniques that every scenario here is
-  mapped to. Defenders and red teams alike owe it a great deal.
-- **[Anthropic](https://www.anthropic.com/)**, whose Claude model wrote
-  the scenarios, scripts, and documentation (see Author above).
+- **[MITRE ATT&CK](https://attack.mitre.org/)**, for the shared vocabulary
+  of tactics and techniques that every host and cloud scenario here is
+  mapped to.
+- **[OWASP](https://owasp.org/)** and the volunteers behind the
+  [OWASP Top 10](https://owasp.org/Top10/), for the shared language of
+  application risk that the web scenarios follow.
+- **[Kali Linux](https://www.kali.org/)** and the OffSec team and
+  contributors, for the attacker workstation image.
+- **[Anthropic](https://www.anthropic.com/)**, whose Claude model wrote the
+  scenarios, scripts and documentation (see the note at the top).
 - **[Docker](https://www.docker.com/)**, for Compose and the
   Docker-in-Docker image that make this environment disposable.
-- **[LinuxServer.io](https://www.linuxserver.io/)**, for the OpenSSH
-  server image used as the lateral-movement target.
-- **[Python Software Foundation](https://www.python.org/)** and the
-  Python community, for the runtime behind the decoy services.
-- **[Debian](https://www.debian.org/)** and the open-source maintainers
-  of nmap, curl, netcat, OpenSSH, sqlite, and the other tools the
-  scenarios drive.
-- **The EDR/CDR vendors, detection engineers, and threat researchers**
-  whose published detections, write-ups, and tradecraft analysis shaped
-  what good detection-coverage validation needs to exercise.
-- **The wider security community**, for decades of shared research,
-  open tooling, and responsible disclosure. Without it there would be
-  nothing worth detecting, and no one to detect it.
+- **[LinuxServer.io](https://www.linuxserver.io/)**, for the OpenSSH server
+  image used as the lateral-movement target.
+- **[Python Software Foundation](https://www.python.org/)** and the Python
+  community, for the runtime behind the decoy services and the vulnerable
+  web app, and **[Alpine Linux](https://alpinelinux.org/)** and
+  **[Debian](https://www.debian.org/)**, for the base images underneath.
+- **The authors and maintainers of the open-source tools the scenarios
+  drive:** [Nmap](https://nmap.org/), [curl](https://curl.se/),
+  [OpenSSH](https://www.openssh.com/), [OpenSSL](https://www.openssl.org/),
+  [SQLite](https://www.sqlite.org/), and netcat, sshpass and the other
+  packages installed from the Kali and Debian archives.
+- **[GitHub](https://github.com/)**, for hosting and for Dependabot, which
+  keeps the pinned container images current.
+- **The EDR, CDR and WAF vendors, detection engineers and threat
+  researchers** whose published detections, write-ups and tradecraft
+  analysis shaped what good detection-coverage validation needs to exercise.
+- **The wider security community**, for decades of shared research, open
+  tooling and responsible disclosure. Without it there would be nothing
+  worth detecting, and no one to detect it.
 
 If you contributed to something this environment relies on and aren't
-credited, that's an oversight, not a statement. Open an issue or PR and
-it will be fixed.
+credited, that's an oversight, not a statement. Open an issue or PR and it
+will be fixed.
 
 ## License
 

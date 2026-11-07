@@ -23,7 +23,7 @@ services:
       # run unless this is set (see playbooks/lib-guard.sh).
       - LAB_CONTAINER=1
       # Stealth profile for the scenarios: noisy (default) | careful | quiet | covert.
-      # See README "Stealth profiles". Set on the host, e.g. STEALTH=quiet docker compose up -d
+      # See docs/REFERENCE.md "Stealth profiles". Set on the host, e.g. STEALTH=quiet docker compose up -d
       - STEALTH=${STEALTH:-noisy}
       - STEALTH_TIME_SCALE=${STEALTH_TIME_SCALE:-1}
       - STEALTH_TIMING=${STEALTH_TIMING:-}

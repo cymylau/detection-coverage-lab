@@ -7,7 +7,7 @@
 # Orchestrates the environment's individual scenario scripts into one longer,
 # multi-stage kill chain, so EDR correlation (not just single-technique
 # detection) can be exercised in one purple-team session. Each stage is
-# also runnable standalone — see README.md for the full list.
+# also runnable standalone — see docs/REFERENCE.md for the full list.
 #
 #   1. Host recon                run-host-recon.sh
 #   2. Credential discovery      run-credential-discovery.sh
@@ -70,8 +70,11 @@ bash "$HERE/run-lateral-movement.sh" 2>&1 | tee -a "$LOG"
 stage "9/10 SSH audit session"
 bash "$HERE/run-ssh-audit-session.sh" 2>&1 | tee -a "$LOG"
 
-stage "10/10 OWASP Top 10:2025 application attacks"
-bash "$HERE/run-owasp-top10.sh" 2>&1 | tee -a "$LOG"
+# SKIP_OWASP=1 runs the ATT&CK stages only (run-everything.sh --only mitre)
+if [ "${SKIP_OWASP:-0}" != "1" ]; then
+    stage "10/10 OWASP Top 10:2025 application attacks"
+    bash "$HERE/run-owasp-top10.sh" 2>&1 | tee -a "$LOG"
+fi
 
 if [ "${KEEP_PERSISTENCE:-0}" != "1" ]; then
     say "cleaning up persistence artifacts (set KEEP_PERSISTENCE=1 to keep them)"
