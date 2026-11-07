@@ -15,10 +15,13 @@ environment the attacker container aliases that address onto loopback first.
 import http.server
 import json
 import os
+import socket
 import socketserver
+import time
 
 BIND_ADDR = os.environ.get("IMDS_BIND", "169.254.169.254")
 BIND_PORT = int(os.environ.get("IMDS_PORT", "80"))
+RESULTS_DIR = os.environ.get("RESULTS_DIR", "/home/root/results")
 
 # Obvious decoys. Not valid anywhere.
 FAKE_ROLE = "northline-decoy-role"
@@ -32,6 +35,19 @@ FAKE_CREDS = {
 }
 
 
+def _server_log(server, **fields):
+    """Timestamped record of what this service actually received, so the lab can
+    confirm each client-side action from the destination's point of view."""
+    now = time.time()
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%03dZ" % int((now % 1) * 1000), "epoch": round(now, 3), "server": server, "host": socket.gethostname()}
+    rec.update(fields)
+    try:
+        with open(os.path.join(RESULTS_DIR, f"server_{server}.jsonl"), "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
 class IMDSHandler(http.server.BaseHTTPRequestHandler):
     def _send(self, body: str, ctype: str = "text/plain"):
         payload = body.encode()
@@ -43,6 +59,7 @@ class IMDSHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self):
+        _server_log("imds", method="GET", path=self.path, client=self.client_address[0])
         p = self.path.rstrip("/")
         base = "/latest/meta-data/iam/security-credentials"
         if p in ("", "/latest", "/latest/meta-data"):

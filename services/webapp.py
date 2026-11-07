@@ -116,6 +116,19 @@ def parse_token(tok):
         return None
 
 
+def _server_log(server, **fields):
+    """Timestamped record of what this service actually received, so the lab can
+    confirm each client-side action from the destination's point of view."""
+    now = time.time()
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%03dZ" % int((now % 1) * 1000), "epoch": round(now, 3), "server": server}
+    rec.update(fields)
+    try:
+        with open(os.path.join(RESULTS_DIR, f"server_{server}.jsonl"), "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
 class H(BaseHTTPRequestHandler):
     server_version = "Northline-Portal/1.0 (python)"  # A02: verbose banner
 
@@ -162,6 +175,7 @@ class H(BaseHTTPRequestHandler):
         self.route("POST")
 
     def route(self, method):
+        _server_log("web-portal", method=method, path=self.path, client=self.cl)
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         p = u.path

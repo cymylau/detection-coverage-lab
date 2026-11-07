@@ -41,8 +41,9 @@ def collapse(rows):
         if out and out[-1]["_key"] == key:
             out[-1]["_n"] += 1
             out[-1]["_last"] = r
+            out[-1]["_rows"].append(r)
             continue
-        out.append(dict(r, _key=key, _n=1, _last=r))
+        out.append(dict(r, _key=key, _n=1, _last=r, _rows=[r]))
     return out
 
 
@@ -72,9 +73,9 @@ def main():
         json.dump(rows, sys.stdout, indent=1); print(); return
     if a.format == "csv":
         w = csv.writer(sys.stdout)
-        w.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "step", "result", "scenario", "profile", "pair", "variant", "ref"])
+        w.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "step", "result", "scenario", "profile", "pair", "variant", "ref", "seen_at_destination", "evidence"])
         for r in rows:
-            w.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], r.get("step", ""), r.get("result", ""), r.get("scenario", ""), r.get("profile", ""), r.get("pair", ""), r.get("variant", ""), r.get("ref", "")])
+            w.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], r.get("step", ""), r.get("result", ""), r.get("scenario", ""), r.get("profile", ""), r.get("pair", ""), r.get("variant", ""), r.get("ref", ""), r.get("observed", ""), r.get("evidence", "")])
         return
 
     names = load_names()
@@ -86,6 +87,7 @@ def main():
     day = rows[0]["ts"][:10]
     print(f"All times UTC, {day}. Source/destination are container (compose service) names.")
     shown = rows if a.full else collapse(rows)
+    confirmed = any("observed" in r for r in rows)
     table = []
     for r in shown:
         n = r.get("_n", 1)
@@ -93,15 +95,31 @@ def main():
         if n > 1:
             span = float(r["_last"]["epoch"]) - float(r["epoch"])
             path = f"{path} (x{n} over {span:.0f}s)"
-        table.append((r["ts"][11:23], r["technique"] + (f" ({r['variant']})" if r.get("variant") else ""), clip(r["command"], 46), r["src"], r["dst"], clip(path, 56)))
-    head = ("Time", "Technique", "Command", "Source", "Destination", "Path / ID")
-    widths = [max(len(head[i]), *(len(t[i]) for t in table)) for i in range(6)]
-    line = lambda t: "  ".join(str(t[i]).ljust(widths[i]) for i in range(6)).rstrip()
+        row = [r["ts"][11:23], r["technique"] + (f" ({r['variant']})" if r.get("variant") else ""), clip(r["command"], 46), r["src"], r["dst"], clip(path, 56)]
+        if confirmed:
+            members = r.get("_rows", [r])
+            yes = sum(1 for m in members if m.get("observed") == "yes")
+            no = sum(1 for m in members if m.get("observed") == "NO")
+            row.append("n/a" if yes + no == 0 else "yes" if no == 0 else "NO" if yes == 0 else f"{yes}/{yes + no}")
+        table.append(tuple(row))
+    head = ["Time", "Technique", "Command", "Source", "Destination", "Path / ID"] + (["Seen at dest"] if confirmed else [])
+    ncol = len(head)
+    widths = [max(len(head[i]), *(len(t[i]) for t in table)) for i in range(ncol)]
+    line = lambda t: "  ".join(str(t[i]).ljust(widths[i]) for i in range(ncol)).rstrip()
     print(line(head)); print("  ".join("-" * w for w in widths))
     for t in table:
         print(line(t))
     if not a.full and len(shown) < len(rows):
         print(f"({len(rows) - len(shown)} repeated action(s) collapsed; use --full or the CSV for every row)")
+
+    if confirmed:
+        miss = [r for r in rows if r.get("observed") == "NO"]
+        ok = sum(1 for r in rows if r.get("observed") == "yes")
+        print(f"\nDestination confirmation: {ok} of {ok + len(miss)} remote actions seen in the destination's own logs.")
+        for r in miss[:8]:
+            print(f"  NOT seen: {r['ts'][11:23]}  {r['technique']}  {r['dst']}  {clip(r['path'], 60)}  ({r.get('evidence', '')})")
+        if len(miss) > 8:
+            print(f"  ... and {len(miss) - 8} more (see activity.csv)")
 
     # attacks covered
     cov = {}

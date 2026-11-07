@@ -12,10 +12,12 @@ It reassembles chunks per session and writes the decoded payload to the
 results directory, purely so an analyst can confirm what was staged.
 """
 import base64
+import json
 import os
 import re
 import socket
 import struct
+import time
 
 BIND_ADDR = os.environ.get("DNS_BIND", "0.0.0.0")
 BIND_PORT = int(os.environ.get("DNS_PORT", "53"))
@@ -32,6 +34,19 @@ SEQ_RE = re.compile(r"^[0-9]{1,6}$")
 
 sessions = {}  # session_id -> {seq: chunk}
 _written = {}  # session_id -> last bytes written (skip identical rewrites)
+
+
+def _server_log(server, **fields):
+    """Timestamped record of what this service actually received, so the lab can
+    confirm each client-side action from the destination's point of view."""
+    now = time.time()
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%03dZ" % int((now % 1) * 1000), "epoch": round(now, 3), "server": server}
+    rec.update(fields)
+    try:
+        with open(os.path.join(RESULTS_DIR, f"server_{server}.jsonl"), "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
 
 
 def parse_qname(data: bytes):
@@ -105,6 +120,7 @@ def main():
             labels, qend = parse_qname(data)
             qname = ".".join(labels)
             print(f"[dns-sink] query from {addr[0]} name={qname}", flush=True)
+            _server_log("dns-sink", qname=qname, client=addr[0])
             record(labels)
             sock.sendto(build_response(data, qend), addr)
         except Exception as e:  # keep the sink alive on malformed packets

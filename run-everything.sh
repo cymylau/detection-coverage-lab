@@ -98,10 +98,14 @@ for svc in ops-console dns-sink control-api web-portal; do
     $COMPOSE exec -T "$svc" chown -R "$(id -u):$(id -g)" /home/root/results || true
 done
 
-# Final activity report for THIS run: readable table + CSV (every row, every field).
+# Confirm each action from the destination's side (their own logs), then write the
+# final activity report for THIS run: readable table + CSV (every row, every field).
 if [ -f results/activity.jsonl ] && command -v python3 >/dev/null 2>&1; then
-    python3 playbooks/activity-report.py results/activity.jsonl --since "$RUN_START" > results/activity_report.txt
-    python3 playbooks/activity-report.py results/activity.jsonl --since "$RUN_START" --format csv > results/activity.csv
+    $COMPOSE exec -T internal-host cat /config/logs/openssh/current > results/server_sshd.log 2>/dev/null || true
+    SRC=results/activity.jsonl
+    if python3 playbooks/observe.py --results results --since "$RUN_START"; then SRC=results/activity_confirmed.jsonl; fi
+    python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" > results/activity_report.txt
+    python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" --format csv > results/activity.csv
     cat results/activity_report.txt
     echo
     echo "[run-everything] activity report: results/activity_report.txt (table)  results/activity.csv (every row)"

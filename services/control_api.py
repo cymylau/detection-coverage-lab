@@ -66,6 +66,19 @@ def log(line: str):
         f.write(entry + "\n")
 
 
+def _server_log(server, **fields):
+    """Timestamped record of what this service actually received, so the lab can
+    confirm each client-side action from the destination's point of view."""
+    now = time.time()
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%03dZ" % int((now % 1) * 1000), "epoch": round(now, 3), "server": server}
+    rec.update(fields)
+    try:
+        with open(os.path.join(RESULTS_DIR, f"server_{server}.jsonl"), "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
 class C2Handler(BaseHTTPRequestHandler):
     def _send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -76,6 +89,7 @@ class C2Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        _server_log("control-api", method="GET", path=self.path, client=self.client_address[0])
         if self.path.startswith("/beacon"):
             ua = self.headers.get("User-Agent", "-")
             log(f"beacon from {self.client_address[0]} ua='{ua}' path={self.path}")
@@ -99,6 +113,7 @@ class C2Handler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
     def do_POST(self):
+        _server_log("control-api", method="POST", path=self.path, client=self.client_address[0])
         try:
             length = int(self.headers.get("Content-Length", 0))
         except ValueError:
