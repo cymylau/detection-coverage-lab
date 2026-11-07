@@ -38,7 +38,7 @@ services:
   # above). No volume is declared, so `docker compose down -v` resets it.
   # setup-net gives it egress to pull alpine:3.20 during setup only.
   docker-sandbox:
-    image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+    image: docker:28-dind@sha256:2a232a42256f70d78e3cc5d2b5d6b3276710a0de0596c145f627ecfae90282ac
     container_name: cymylau-docker-sandbox
     hostname: docker-sandbox
     privileged: true
