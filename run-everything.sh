@@ -12,6 +12,10 @@
 #   bash run-everything.sh --only untrusted-fields   # untrusted telemetry-field handling (opt-in, not part of the default run)
 #   bash run-everything.sh --stealth quiet    # quieter attacker: noisy|careful|quiet|covert
 #
+#   bash run-everything.sh --check            # preflight checks only, start nothing
+#   bash run-everything.sh --down             # stop and remove the lab's containers and networks
+#   bash run-everything.sh --reset [--yes]    # --down, then delete ./results (asks first unless --yes)
+#
 # Options combine, e.g.  bash run-everything.sh --only owasp --stealth careful
 # STEALTH_TIME_SCALE=0.01 shrinks every wait for quick runs.
 #
@@ -22,14 +26,18 @@
 # ---------------------------------------------------------------------------
 set -eu
 
-ONLY=all
+ONLY=all; DO_CHECK=0; DO_DOWN=0; DO_RESET=0; ASSUME_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
+        --check) DO_CHECK=1; shift ;;
+        --down) DO_DOWN=1; shift ;;
+        --reset) DO_RESET=1; shift ;;
+        --yes|-y) ASSUME_YES=1; shift ;;
         --stealth) [ $# -ge 2 ] || { echo "--stealth needs a value" >&2; exit 2; }; export STEALTH="$2"; shift 2 ;;
         --stealth=*) export STEALTH="${1#*=}"; shift ;;
         --only) [ $# -ge 2 ] || { echo "--only needs a value" >&2; exit 2; }; ONLY="$2"; shift 2 ;;
         --only=*) ONLY="${1#*=}"; shift ;;
-        -h|--help) sed -n 2,22p "$0"; exit 0 ;;
+        -h|--help) sed -n 2,26p "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -40,6 +48,79 @@ case "$ONLY" in all|mitre|owasp|untrusted-fields) ;; *)
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
+
+FILES="-f compose.yml -f compose.privileged.yml"
+PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-')}"
+
+# Preflight: fail early, with a plain message, instead of half-way through a run.
+PF_BAD=0
+pf_ok()   { echo "  ok    $*"; }
+pf_fail() { echo "  FAIL  $*"; PF_BAD=1; }
+pf_warn() { echo "  warn  $*"; }
+preflight() {
+    PF_BAD=0
+    echo "[run-everything] preflight checks"
+    command -v docker >/dev/null 2>&1 && pf_ok "docker CLI found" || pf_fail "docker is not installed or not on PATH"
+    if command -v docker >/dev/null 2>&1; then
+        if docker info >/dev/null 2>&1; then pf_ok "docker daemon reachable"
+        else pf_fail "cannot talk to the docker daemon (is it running? is your user in the 'docker' group?)"; fi
+        docker compose version >/dev/null 2>&1 && pf_ok "docker compose plugin found" || pf_fail "the 'docker compose' plugin is missing (install docker-compose-plugin)"
+    fi
+    command -v python3 >/dev/null 2>&1 && pf_ok "python3 found (used for reports)" || pf_fail "python3 is required on the host for the reports"
+    [ -f compose.yml ] && pf_ok "compose.yml present" || pf_fail "compose.yml not found: run this from the repository root"
+    local kb; kb="$(df -Pk . | awk 'NR==2{print $4}')"
+    if [ "${kb:-0}" -lt 4194304 ]; then pf_fail "only $((kb/1024)) MB free here; the images need about 4 GB"
+    elif [ "$kb" -lt 8388608 ]; then pf_warn "only $((kb/1024)) MB free; fine for one run, tight for several"
+    else pf_ok "disk space ($((kb/1024)) MB free)"; fi
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        # only the container names this compose file actually declares can collide
+        local other="" n owner
+        for n in $(grep -h 'container_name:' compose.yml compose.privileged.yml 2>/dev/null | awk '{print $2}'); do
+            owner="$(docker ps -a --filter "name=^/${n}$" --format '{{.Label "com.docker.compose.project"}}' | head -1)"
+            [ -n "$owner" ] && [ "$owner" != "$PROJECT" ] && other="${other}${n} (project ${owner})"$'\n'
+        done
+        if [ -n "$other" ]; then
+            pf_fail "containers from a different lab are using the northline-* names:"
+            printf "%s" "$other" | sed 's/^/          /'
+            echo "        remove them first:  docker rm -f \$(docker ps -aq --filter name=northline-)"
+        else
+            local mine; mine="$(docker ps -q --filter label=com.docker.compose.project="$PROJECT" | wc -l)"
+            [ "$mine" -gt 0 ] && pf_warn "this lab is already running ($mine containers); the run will reuse it" || pf_ok "no conflicting containers"
+        fi
+    fi
+    return $PF_BAD
+}
+
+lab_down() {
+    echo "[run-everything] stopping and removing the lab..."
+    docker compose $FILES down -v --remove-orphans
+}
+
+fix_results_ownership() {
+    [ -d results ] || return 0
+    docker run --rm -v "$PWD/results:/r" alpine:3.20 chown -R "$(id -u):$(id -g)" /r >/dev/null 2>&1 || true
+}
+
+if [ "$DO_CHECK" = 1 ]; then preflight && echo "[run-everything] all checks passed" ; exit $?; fi
+if [ "$DO_DOWN" = 1 ] || [ "$DO_RESET" = 1 ]; then
+    lab_down
+    fix_results_ownership
+    if [ "$DO_RESET" = 1 ]; then
+        if [ -d results ] && [ -n "$(ls -A results 2>/dev/null)" ]; then
+            if [ "$ASSUME_YES" != 1 ]; then
+                printf '[run-everything] delete everything in ./results? [y/N] '; read -r ans
+                case "$ans" in y|Y|yes|YES) ;; *) echo "[run-everything] kept ./results"; exit 0 ;; esac
+            fi
+            rm -rf results/* results/.[!.]* 2>/dev/null || docker run --rm -v "$PWD/results:/r" alpine:3.20 sh -c 'rm -rf /r/* /r/.[!.]*'
+            echo "[run-everything] ./results cleared"
+        fi
+    fi
+    echo "[run-everything] done."
+    exit 0
+fi
+
+preflight || { echo "[run-everything] preflight failed; fix the items marked FAIL and run again (or run with --check)"; exit 1; }
+echo
 
 # Create results/ as the invoking user (otherwise Docker creates it as root).
 mkdir -p results
