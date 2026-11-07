@@ -1,8 +1,10 @@
+# Cymylau Ltd is a FICTITIOUS company: the made-up victim whose decoy data this lab uses.
+# "cymylau" is Welsh for "clouds". Nothing here belongs to a real organisation.
 services:
   # Attacker workstation — runs the emulation chain (nmap -> IMDS -> base64 -> DNS exfil).
   ops-console:
     image: kalilinux/kali-rolling@sha256:7997e0581c4f5c185cfe6773d5cae8fcc7c6b79798726ccaabf843af4bcd2013
-    container_name: northline-ops-console
+    container_name: cymylau-ops-console
     hostname: attacker-workstation
     # NET_ADMIN lets bootstrap.sh alias 169.254.169.254 onto loopback.
     # (Full privileged mode is not required for this scenario.)
@@ -44,7 +46,7 @@ services:
       - WEB_HOST=web-portal
       - WEB_PORT=8080
     networks:
-      - northline-net
+      - cymylau-net
       - setup-net   # egress for tool install only; removed by lock-down-network.sh
     depends_on:
       - dns-sink
@@ -61,7 +63,7 @@ services:
   # Logs every query and reassembles the decoded payload into ./results.
   dns-sink:
     image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
-    container_name: northline-dns-sink
+    container_name: cymylau-dns-sink
     hostname: dns-sink
     command: ["python3", "/app/dns_sink.py"]
     volumes:
@@ -73,14 +75,14 @@ services:
       - EXFIL_DOMAIN=exfil.internal
       - RESULTS_DIR=/home/root/results
     networks:
-      - northline-net
+      - cymylau-net
 
   # Command-and-control relay — attacker-controlled HTTP endpoint for beacon/exfil
   # scenarios (run-c2-beacon.sh, run-https-exfil.sh). Only ever
   # hands out one hardcoded, harmless no-op "task". Internal to this environment only.
   control-api:
     image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
-    container_name: northline-control-api
+    container_name: cymylau-control-api
     hostname: control-api
     command: ["python3", "/app/control_api.py"]
     volumes:
@@ -91,7 +93,7 @@ services:
       - C2_PORT=8443
       - RESULTS_DIR=/home/root/results
     networks:
-      - northline-net
+      - cymylau-net
 
   # Deliberately vulnerable DECOY web app for the OWASP Top 10:2025 scenarios
   # (run-owasp-top10.sh). Real vulnerable code paths, inert DECOY payloads,
@@ -100,7 +102,7 @@ services:
   # alias the decoy metadata IP onto loopback for the SSRF scenario.
   web-portal:
     image: python:3.12-alpine@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7
-    container_name: northline-web-portal
+    container_name: cymylau-web-portal
     hostname: web-portal
     command: ["sh", "/app/webapp-entrypoint.sh"]
     cap_add:
@@ -113,7 +115,7 @@ services:
       - WEB_PORT=8080
       - RESULTS_DIR=/home/root/results
     networks:
-      - northline-net
+      - cymylau-net
 
   # Internal "second host" — target for lateral-movement and SSH-audit-
   # session emulation (run-lateral-movement.sh,
@@ -124,7 +126,7 @@ services:
   # just permission-denied noise.
   internal-host:
     image: lscr.io/linuxserver/openssh-server:latest@sha256:aa4e1b3916e8555f24e574e6108b0b89a1b20362b0a11800a71280b45999649e
-    container_name: northline-internal-host
+    container_name: cymylau-internal-host
     hostname: internal-host
     environment:
       - PUID=1000
@@ -135,12 +137,12 @@ services:
       - USER_PASSWORD=DECOY-NOT-REAL-PASSWORD
       - SUDO_ACCESS=true
     networks:
-      - northline-net
+      - cymylau-net
 
 networks:
   # All lab traffic. `internal: true` means no gateway: containers cannot reach
   # the internet or the Docker host, only each other.
-  northline-net:
+  cymylau-net:
     driver: bridge
     internal: true
   # Egress for the setup phase only (apt/docker pull). Only ops-console (and

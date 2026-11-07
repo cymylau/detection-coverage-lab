@@ -24,10 +24,10 @@ require_lab_container
 
 HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
-MARKER="# northline-persistence-decoy"
+MARKER="# cymylau-persistence-decoy"
 DECOY_SCRIPT="${HOME_DIR}/.edr_decoy_payload.sh"
 UNIT_DIR="${HOME_DIR}/.config/systemd/user"
-UNIT_FILE="${UNIT_DIR}/northline-decoy.service"
+UNIT_FILE="${UNIT_DIR}/cymylau-decoy.service"
 
 mkdir -p "$RESULTS_DIR"
 say() { echo "[persistence] $*"; }
@@ -52,12 +52,12 @@ LOG="${RESULTS_DIR}/persistence_${SESSION}.log"
 log() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; log "=== $* ==="; }
 
-log "Northline :: persistence emulation :: session=$SESSION"
+log "Cymylau :: persistence emulation :: session=$SESSION"
 
 cat > "$DECOY_SCRIPT" <<EOF
 #!/bin/bash
 $MARKER
-echo "northline decoy persistence payload executed at \$(date -u)" >> "$RESULTS_DIR/persistence_trigger.log"
+echo "cymylau decoy persistence payload executed at \$(date -u)" >> "$RESULTS_DIR/persistence_trigger.log"
 EOF
 chmod +x "$DECOY_SCRIPT"
 log "wrote harmless decoy payload -> $DECOY_SCRIPT"
@@ -78,7 +78,7 @@ if command -v systemctl >/dev/null 2>&1; then
     mkdir -p "$UNIT_DIR"
     cat > "$UNIT_FILE" <<EOF
 [Unit]
-Description=Northline decoy persistence unit $MARKER
+Description=Cymylau decoy persistence unit $MARKER
 
 [Service]
 ExecStart=$DECOY_SCRIPT

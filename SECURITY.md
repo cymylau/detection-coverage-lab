@@ -1,5 +1,7 @@
 # Security Policy
 
+> **About the name.** *Cymylau* is Welsh for "clouds" (roughly "kuh-MUL-eye"). **Cymylau Ltd is a fictitious company**, invented as the victim in this lab's decoy data: the made-up web portal, email addresses, credentials and documents all belong to it. It is not a real organisation, and any resemblance to a real company of that name is coincidental. Decoy addresses use the reserved `.example` domain.
+
 ## What this repository is
 
 A non-production environment for validating EDR/CDR detection

@@ -34,7 +34,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: defense-evasion emulation :: session=$SESSION"
+say "Cymylau :: defense-evasion emulation :: session=$SESSION"
 
 step "process masquerading — benign binary under a suspicious name (ATT&CK T1036.003)"
 st_mark T1036.003 "masquerade"; act_here "cp sleep + execute under new name" "$MASQ_PATH"

@@ -36,7 +36,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 stage() { echo "" | tee -a "$LOG"; say "########## STAGE: $* ##########"; }
 
-say "Northline :: FULL CHAIN emulation :: session=$SESSION"
+say "Cymylau :: FULL CHAIN emulation :: session=$SESSION"
 say "this orchestrates multiple independent scenario scripts — see each"
 say "script's own header for its ATT&CK technique mapping."
 

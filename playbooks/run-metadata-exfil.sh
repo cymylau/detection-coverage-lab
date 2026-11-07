@@ -41,7 +41,7 @@ resolve_sink() {
     echo "$ip"
 }
 
-say "Northline :: metadata-theft + DNS-exfil emulation :: session=$SESSION"
+say "Cymylau :: metadata-theft + DNS-exfil emulation :: session=$SESSION"
 say "metadata=$METADATA_IP exfil-domain=$EXFIL_DOMAIN dns-sink=$DNS_SINK"
 
 # --- Step 1: Discovery -----------------------------------------------------

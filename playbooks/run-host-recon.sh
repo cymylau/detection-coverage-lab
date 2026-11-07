@@ -25,7 +25,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: host-recon emulation :: session=$SESSION"
+say "Cymylau :: host-recon emulation :: session=$SESSION"
 
 step "whoami / id / uname -a (ATT&CK T1033, T1082)"
 st_mark T1033 "whoami-id"; act_here "whoami; id" "current user"

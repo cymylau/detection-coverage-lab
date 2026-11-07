@@ -30,7 +30,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: Docker-socket escape emulation :: session=$SESSION"
+say "Cymylau :: Docker-socket escape emulation :: session=$SESSION"
 
 if [ -z "${DOCKER_HOST:-}" ]; then
     say "!! DOCKER_HOST not set. Bring the environment up with the privileged overlay:"

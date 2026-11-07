@@ -24,7 +24,7 @@ BIND_PORT = int(os.environ.get("IMDS_PORT", "80"))
 RESULTS_DIR = os.environ.get("RESULTS_DIR", "/home/root/results")
 
 # Obvious decoys. Not valid anywhere.
-FAKE_ROLE = "northline-decoy-role"
+FAKE_ROLE = "cymylau-decoy-role"
 FAKE_CREDS = {
     "Code": "Success",
     "Type": "AWS-HMAC",

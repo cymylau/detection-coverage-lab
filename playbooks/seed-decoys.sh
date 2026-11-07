@@ -21,7 +21,7 @@ SA_DIR="/var/run/secrets/kubernetes.io/serviceaccount"
 
 say() { echo "[seed-decoys] $*"; }
 
-MANIFEST="${HOME_DIR}/.northline-seeded"
+MANIFEST="${HOME_DIR}/.cymylau-seeded"
 # Record each path this script creates, so --cleanup removes ONLY those and
 # never a pre-existing real file.
 record() { echo "$1" >> "$MANIFEST"; }
@@ -61,7 +61,7 @@ if [ ! -f "${HOME_DIR}/.ssh/id_rsa" ]; then
         echo "-----END OPENSSH PRIVATE KEY-----"
     } > "${HOME_DIR}/.ssh/id_rsa"
     chmod 600 "${HOME_DIR}/.ssh/id_rsa"
-    echo "ssh-rsa NORTHLINE-DECOY-NOT-A-REAL-KEY northline-decoy@northline-ops-console" \
+    echo "ssh-rsa CYMYLAU-DECOY-NOT-A-REAL-KEY cymylau-decoy@cymylau-ops-console" \
         > "${HOME_DIR}/.ssh/id_rsa.pub"
     say "seeded decoy SSH keypair -> ${HOME_DIR}/.ssh/id_rsa"
 fi
@@ -88,7 +88,7 @@ con = sqlite3.connect(db)
 con.execute("CREATE TABLE moz_logins (hostname TEXT, username TEXT, password TEXT)")
 con.execute(
     "INSERT INTO moz_logins VALUES (?, ?, ?)",
-    ("https://northline-decoy.example", "decoy-user", "DECOY-NOT-A-REAL-PASSWORD"),
+    ("https://cymylau-decoy.example", "decoy-user", "DECOY-NOT-A-REAL-PASSWORD"),
 )
 con.commit()
 con.close()
@@ -123,7 +123,7 @@ if [ ! -f "${SA_DIR}/token" ]; then
     echo "-----BEGIN CERTIFICATE-----
 TEFCLURFQ09ZLUNFUlRJRklDQVRFLU5PVC1BLVJFQUwtQ0VSVC1GT1ItVEhFLUVESi1URVNULUxBQg==
 -----END CERTIFICATE-----" > "${SA_DIR}/ca.crt"
-    echo "northline-decoy-namespace" > "${SA_DIR}/namespace"
+    echo "cymylau-decoy-namespace" > "${SA_DIR}/namespace"
     say "seeded decoy Kubernetes service-account token -> ${SA_DIR}/token"
 fi
 

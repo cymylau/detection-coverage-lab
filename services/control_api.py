@@ -5,7 +5,7 @@ Command-and-control relay for the cloud/container EDR (CDR) detection-coverage e
 A minimal HTTP server that stands in for an attacker-controlled command and
 control server, purely to give beacon/exfil emulation scripts a destination
 inside the environment's network. It never reaches, proxies to, or is reachable from
-anything outside the environment's `northline-net` bridge. All "tasking" is a hardcoded
+anything outside the environment's `cymylau-net` bridge. All "tasking" is a hardcoded
 harmless string; nothing it returns is ever executed as a privileged or
 persistent action unless a scenario script explicitly says so, and when it
 does, it is always a no-op decoy command run only inside the ephemeral
@@ -21,7 +21,7 @@ Endpoints:
                                token presented (workload-identity-theft emulation)
   POST /logging/disable    -- decoy cloud audit-log control-plane call (impair-logging
                                emulation); never actually disables anything real
-  GET  /pkg/northline-utils.py -- inert decoy package (OWASP A03 supply-chain scenario)
+  GET  /pkg/cymylau-utils.py -- inert decoy package (OWASP A03 supply-chain scenario)
   GET  /logging/status     -- reports the relay's own (in-memory only) logging flag
 """
 import itertools
@@ -97,11 +97,11 @@ class C2Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/pool/getwork"):
             log(f"mining-pool getwork from {self.client_address[0]} path={self.path}")
             self._send_json({"job_id": "decoy-job-0001", "target": "00000000ffff0000000000000000000000000000000000000000000000000"})
-        elif self.path.startswith("/pkg/northline-utils.py"):
+        elif self.path.startswith("/pkg/cymylau-utils.py"):
             # Decoy "package" for the OWASP A03 supply-chain scenario: unsigned,
             # inert code. Its only effect is printing a marker line.
             log(f"package download from {self.client_address[0]} path={self.path}")
-            code = b'print("DECOY-POSTINSTALL-EXECUTED northline-utils 9.9.9 (inert)")\n'
+            code = b'print("DECOY-POSTINSTALL-EXECUTED cymylau-utils 9.9.9 (inert)")\n'
             self.send_response(200)
             self.send_header("Content-Type", "text/x-python")
             self.send_header("Content-Length", str(len(code)))

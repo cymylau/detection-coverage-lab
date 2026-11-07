@@ -7,11 +7,11 @@
 # Emulates discovery of, and SSH login to, a second host on the internal
 # environment network (compose service "internal-host"), using the decoy SSH
 # key/credentials seeded by seed-decoys.sh / the internal-host image's own
-# decoy account. Everything stays on the environment's internal `northline-net` bridge;
+# decoy account. Everything stays on the environment's internal `cymylau-net` bridge;
 # internal-host is a disposable container with no real data and no real
 # account.
 #
-#   nmap sweep of northline-net                Network Service Discovery   (T1046)
+#   nmap sweep of cymylau-net                Network Service Discovery   (T1046)
 #   SSH with password/key to peer host  Remote Services: SSH        (T1021.004)
 #   use of credentials discovered earlier                            (T1552.004/.001)
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: lateral-movement emulation :: session=$SESSION"
+say "Cymylau :: lateral-movement emulation :: session=$SESSION"
 
 TARGET_IP="$(getent hosts "$INTERNAL_HOST" 2>/dev/null | awk '{print $1; exit}')"
 if [ -z "${TARGET_IP:-}" ]; then

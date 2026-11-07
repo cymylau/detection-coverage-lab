@@ -1,4 +1,4 @@
-# Northline — Detection Coverage Lab (EDR / CDR / WAF)
+# Cymylau — Detection Coverage Lab (EDR / CDR / WAF)
 
 A self-contained, non-production environment that **generates attack
 telemetry on purpose**, so you can check whether your security tooling
@@ -18,6 +18,8 @@ lab's internal network.
 > **Author:** the scenarios, scripts and documentation were written by
 > Claude (Anthropic), with human review and direction. Review it before
 > relying on it, as you would any AI-authored code.
+
+> **About the name.** *Cymylau* is Welsh for "clouds" (roughly "kuh-MUL-eye"). **Cymylau Ltd is a fictitious company**, invented as the victim in this lab's decoy data: the made-up web portal, email addresses, credentials and documents all belong to it. It is not a real organisation, and any resemblance to a real company of that name is coincidental. Decoy addresses use the reserved `.example` domain.
 
 ## Read this first: disposable machines only
 
@@ -244,7 +246,7 @@ neighbouring ones too.
 - **A run stopped half-way:** `bash run-everything.sh --down` removes the lab,
   then run the walkthrough again. `bash run-everything.sh --reset` also clears
   `./results` (it asks first).
-- **A name conflict with `northline-*` containers:** an earlier lab is still
+- **A name conflict with `cymylau-*` containers:** an earlier lab is still
   running. `--down` removes it, or the preflight shows the exact command.
 
 ## Advanced use

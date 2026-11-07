@@ -27,7 +27,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: privileged-container-capability-abuse emulation :: session=$SESSION"
+say "Cymylau :: privileged-container-capability-abuse emulation :: session=$SESSION"
 
 step "capability discovery (ATT&CK T1082-adjacent)"
 st_mark T1082 "capability-discovery"; act_here "capsh --print / /proc/self/status" "process capabilities"

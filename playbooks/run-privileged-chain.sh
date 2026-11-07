@@ -31,7 +31,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 stage() { echo "" | tee -a "$LOG"; say "########## STAGE: $* ##########"; }
 
-say "Northline :: privileged/cloud-native chain :: session=$SESSION"
+say "Cymylau :: privileged/cloud-native chain :: session=$SESSION"
 
 if [ -z "${DOCKER_HOST:-}" ]; then
     say "!! DOCKER_HOST not set. Bring the environment up with the privileged overlay first:"

@@ -26,7 +26,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: impair-cloud-logging emulation :: session=$SESSION"
+say "Cymylau :: impair-cloud-logging emulation :: session=$SESSION"
 
 step "check current (decoy) logging state"
 st_mark T1562.008 "check-logging-state"

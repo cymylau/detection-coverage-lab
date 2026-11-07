@@ -42,7 +42,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: SSH audit-session emulation :: session=$SESSION"
+say "Cymylau :: SSH audit-session emulation :: session=$SESSION"
 
 if ! command -v sshpass >/dev/null 2>&1; then
     say "!! sshpass not installed. run: bash playbooks/install-extra-tools.sh"

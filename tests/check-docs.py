@@ -12,7 +12,8 @@ Checks:
   3. the README lists all ten OWASP Top 10:2025 categories and the untrusted-field IDs
      the scenario really uses;
   4. the technique count stated in the README matches the table;
-  5. every local link and #anchor in README.md, SECURITY.md and docs/*.md resolves.
+  5. every local link and #anchor in README.md, SECURITY.md and docs/*.md resolves;
+  6. every doc says Cymylau Ltd is a fictitious company.
 """
 import glob, os, re, subprocess, sys
 
@@ -79,6 +80,10 @@ def anchors(path):
 
 
 docs = ["README.md", "SECURITY.md"] + sorted(glob.glob("docs/*.md"))
+for d in docs:   # 6. the fictitious-company notice must be in every doc
+    t = open(d).read().lower()
+    if "fictitious" not in t or "cymylau ltd" not in t:
+        bad(f"{d}: missing the notice that Cymylau Ltd is a fictitious company")
 externals = set()
 for d in docs:
     text = open(d).read()

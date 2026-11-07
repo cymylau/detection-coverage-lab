@@ -28,7 +28,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: HTTPS/HTTP exfil emulation :: session=$SESSION"
+say "Cymylau :: HTTPS/HTTP exfil emulation :: session=$SESSION"
 
 ARCHIVE="$(find "$RESULTS_DIR" -maxdepth 1 -name 'staged_*.tar.gz' | sort | tail -n1)"
 if [ -z "${ARCHIVE:-}" ]; then

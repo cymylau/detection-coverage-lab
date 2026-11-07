@@ -13,7 +13,7 @@
 # devices, cgroup v1 release_agent, kernel modules). The scenarios stay
 # inside docker-sandbox by design, but the only real isolation is the
 # disposable VM you run this on. Never run this overlay on a workstation or
-# shared host. Nothing is published to the host, and northline-net is
+# shared host. Nothing is published to the host, and cymylau-net is
 # `internal: true`, which limits (does not remove) the blast radius.
 #
 # Usage:
@@ -39,11 +39,11 @@ services:
   # setup-net gives it egress to pull alpine:3.20 during setup only.
   docker-sandbox:
     image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
-    container_name: northline-docker-sandbox
+    container_name: cymylau-docker-sandbox
     hostname: docker-sandbox
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
     networks:
-      - northline-net
+      - cymylau-net
       - setup-net

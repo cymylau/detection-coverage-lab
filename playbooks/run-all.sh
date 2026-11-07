@@ -35,7 +35,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 stage() { echo "" | tee -a "$LOG"; say "########## $* ##########"; }
 
-say "Northline :: run-all :: session=$SESSION"
+say "Cymylau :: run-all :: session=$SESSION"
 say "this runs setup, then every scenario script, start to finish."
 
 # SKIP_SETUP=1: tools are already installed (run-everything.sh does setup

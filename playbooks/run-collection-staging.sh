@@ -30,7 +30,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: collection & staging emulation :: session=$SESSION"
+say "Cymylau :: collection & staging emulation :: session=$SESSION"
 
 if [ ! -d "$DECOY_DIR/documents" ]; then
     say "!! no decoys found — run: bash playbooks/seed-decoys.sh first"

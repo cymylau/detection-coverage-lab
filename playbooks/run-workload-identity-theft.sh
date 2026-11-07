@@ -28,7 +28,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: workload-identity-theft emulation :: session=$SESSION"
+say "Cymylau :: workload-identity-theft emulation :: session=$SESSION"
 
 step "discovery — find the mounted workload-identity token (ATT&CK T1552.007)"
 if [ ! -f "${SA_DIR}/token" ]; then

@@ -29,7 +29,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: cryptomining/resource-hijack emulation :: session=$SESSION duration=${DURATION}s"
+say "Cymylau :: cryptomining/resource-hijack emulation :: session=$SESSION duration=${DURATION}s"
 
 step "sustained high-CPU decoy load (ATT&CK T1496)"
 st_mark T1496 "cpu-load"; act_here "$(command -v openssl >/dev/null && echo "openssl speed sha256" || echo "busy loop") for ${DURATION}s" "sustained CPU"

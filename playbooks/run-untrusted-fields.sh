@@ -51,7 +51,7 @@ mkdir -p "$RESULTS_DIR" "$WORK"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: untrusted-field handling :: session=$SESSION"
+say "Cymylau :: untrusted-field handling :: session=$SESSION"
 say "$(st_banner)"
 
 # gap between the control and injected run of a pair: separable in the telemetry

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Decoy web application ("Northline Portal") for the OWASP Top 10:2025 scenarios.
+Decoy web application ("Cymylau Portal", the portal of the fictitious company Cymylau Ltd) for the OWASP Top 10:2025 scenarios.
 
 PURPOSE: generate real application-layer telemetry and artefacts (requests,
 payloads, process spawns, file reads, outbound fetches) so WAF / API / CDR /
@@ -8,7 +8,7 @@ runtime sensors have something genuine to detect. Not a training target.
 
 DELIBERATELY VULNERABLE. Every flaw below is intentional, runs as real code,
 and is exercised with inert, DECOY-tagged payloads against decoy data only.
-Runs only on the internal `northline-net` network (no published ports, no
+Runs only on the internal `cymylau-net` network (no published ports, no
 egress). Never expose this to any other network.
 
 One endpoint (or small group) per category. Every request that reaches a
@@ -69,9 +69,9 @@ CREATE TABLE comments (id INTEGER PRIMARY KEY, author TEXT, body TEXT);
 """)
 md5 = lambda s: hashlib.md5(s.encode()).hexdigest()  # A04: unsalted, fast hash
 db.executemany("INSERT INTO users VALUES (?,?,?,?,?,?)", [
-    (1, "admin", "admin", md5("admin"), "admin@northline-decoy.example", "DECOY-ADMIN-NOTE"),
-    (2, "alice", "user", md5("alice123"), "alice@northline-decoy.example", "DECOY-CUSTOMER-RECORD-2"),
-    (3, "bob", "user", md5("bob456"), "bob@northline-decoy.example", "DECOY-CUSTOMER-RECORD-3"),
+    (1, "admin", "admin", md5("admin"), "admin@cymylau-decoy.example", "DECOY-ADMIN-NOTE"),
+    (2, "alice", "user", md5("alice123"), "alice@cymylau-decoy.example", "DECOY-CUSTOMER-RECORD-2"),
+    (3, "bob", "user", md5("bob456"), "bob@cymylau-decoy.example", "DECOY-CUSTOMER-RECORD-3"),
 ])
 db.executemany("INSERT INTO products VALUES (?,?,?)", [(1, "decoy-widget", 9.99), (2, "decoy-gadget", 19.99)])
 db.commit()
@@ -130,7 +130,7 @@ def _server_log(server, **fields):
 
 
 class H(BaseHTTPRequestHandler):
-    server_version = "Northline-Portal/1.0 (python)"  # A02: verbose banner
+    server_version = "Cymylau-Portal/1.0 (python)"  # A02: verbose banner
 
     # ---- plumbing ----
     def _send(self, code, body, ctype="application/json", extra=None):
@@ -193,7 +193,7 @@ class H(BaseHTTPRequestHandler):
     # ---- routing ----
     def dispatch(self, m, p, q, body):
         if p == "/" or p == "/health":
-            return self._send(200, {"app": "Northline Portal", "decoy": True})
+            return self._send(200, {"app": "Cymylau Portal", "company": "Cymylau Ltd (fictitious)", "decoy": True})
 
         # ===== A01 Broken Access Control =====
         if p.startswith("/api/users/") and m == "GET":
@@ -359,5 +359,5 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"[webapp] Northline Portal (DECOY, deliberately vulnerable) on {BIND}:{PORT}", flush=True)
+    print(f"[webapp] Cymylau Portal (DECOY, deliberately vulnerable) on {BIND}:{PORT}", flush=True)
     ThreadingHTTPServer((BIND, PORT), H).serve_forever()

@@ -2,6 +2,8 @@
 
 Everything beyond the quick-start guide in the [README](../README.md).
 
+> **About the name.** *Cymylau* is Welsh for "clouds" (roughly "kuh-MUL-eye"). **Cymylau Ltd is a fictitious company**, invented as the victim in this lab's decoy data: the made-up web portal, email addresses, credentials and documents all belong to it. It is not a real organisation, and any resemblance to a real company of that name is coincidental. Decoy addresses use the reserved `.example` domain.
+
 Contents: [The activity log](#the-activity-log) · [Untrusted-field handling](#untrusted-field-handling) · [Scoring your tool](#scoring-your-tool) · [Destination confirmation](#destination-confirmation) · [One technique or tactic](#running-one-technique-or-tactic) · [Preflight and CI](#preflight-teardown-and-ci) · [Safety design](#safety-design) · [Components](#components) ·
 [Running pieces separately](#running-pieces-separately) ·
 [Stealth profiles](#stealth-profiles) ·
@@ -154,7 +156,7 @@ configurations, so safety comes from how it is contained:
   kernel and has an unauthenticated Docker API, so it is **not** a
   security boundary. Never run this on a workstation, shared server or
   production system.
-- **Internal network.** `northline-net` is `internal: true`: no internet,
+- **Internal network.** `cymylau-net` is `internal: true`: no internet,
   no route to the Docker host. Only the setup phase uses a separate
   `setup-net` for installs, and `lock-down-network.sh` removes it before
   any scenario runs (`run-everything.sh` does this for you). If you run

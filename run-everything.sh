@@ -103,9 +103,9 @@ preflight() {
             [ -n "$owner" ] && [ "$owner" != "$PROJECT" ] && other="${other}${n} (project ${owner})"$'\n'
         done
         if [ -n "$other" ]; then
-            pf_fail "containers from a different lab are using the northline-* names:"
+            pf_fail "containers from a different lab are using the cymylau-* names:"
             printf "%s" "$other" | sed 's/^/          /'
-            echo "        remove them first:  docker rm -f \$(docker ps -aq --filter name=northline-)"
+            echo "        remove them first:  docker rm -f \$(docker ps -aq --filter name=cymylau-)"
         else
             local mine; mine="$(docker ps -q --filter label=com.docker.compose.project="$PROJECT" | wc -l)"
             [ "$mine" -gt 0 ] && pf_warn "this lab is already running ($mine containers); the run will reuse it" || pf_ok "no conflicting containers"

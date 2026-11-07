@@ -4,7 +4,7 @@
 #
 # Run from the HOST after tool installation and before any scenario. Leaves
 # ops-console (and docker-sandbox, if present) attached only to the internal
-# northline-net, so scenarios cannot reach the internet or the Docker host.
+# cymylau-net, so scenarios cannot reach the internet or the Docker host.
 # Idempotent. Re-attach for more installs with:
 #   docker network connect <project>_setup-net <container>
 set -eu

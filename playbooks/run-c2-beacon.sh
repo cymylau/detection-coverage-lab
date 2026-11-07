@@ -7,7 +7,7 @@
 # Emulates malware check-in behaviour against the environment's control-api relay
 # (services/control_api.py): periodic, jittered beacons with a spoofed benign
 # User-Agent, occasionally fetching and "executing" the relay's hardcoded
-# no-op decoy task. All traffic stays on the environment's internal `northline-net` bridge.
+# no-op decoy task. All traffic stays on the environment's internal `cymylau-net` bridge.
 #
 #   periodic jittered beacon        C2 over web protocol      (T1071.001)
 #   custom beacon interval/jitter   Application Layer Protocol: Web Protocols (T1071.001)
@@ -31,7 +31,7 @@ mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
-say "Northline :: C2 beacon emulation :: session=$SESSION"
+say "Cymylau :: C2 beacon emulation :: session=$SESSION"
 say "target=${C2_HOST}:${C2_PORT} beacons=${BEACON_COUNT}"
 say "$(st_banner)"
 
