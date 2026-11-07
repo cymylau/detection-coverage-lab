@@ -23,6 +23,7 @@ Endpoints:
                                emulation); never actually disables anything real
   GET  /logging/status     -- reports the relay's own (in-memory only) logging flag
 """
+import itertools
 import json
 import os
 import time
@@ -39,6 +40,11 @@ DECOY_TASK = {
     "task_id": "decoy-task-0001",
     "command": "echo decoy-task-executed",
 }
+
+# Hard cap on any request body. Scenario payloads are a few KB; this stops a
+# stray or hostile client from exhausting memory or the host's results disk.
+MAX_BODY = int(os.environ.get("C2_MAX_BODY", str(10 * 1024 * 1024)))
+_exfil_counter = itertools.count(1)  # unique suffix: same-second uploads can't collide
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
 BEACON_LOG = os.path.join(RESULTS_DIR, "control_api_beacons.log")
@@ -82,14 +88,24 @@ class C2Handler(BaseHTTPRequestHandler):
             self.send_error(404, "Not Found")
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            length = -1
+        if length < 0:
+            self.send_error(400, "Bad Content-Length")
+            return
+        if length > MAX_BODY:
+            self.close_connection = True
+            self.send_error(413, "Payload Too Large")
+            return
         body = self.rfile.read(length) if length else b""
         if self.path.startswith("/task-result"):
             log(f"task-result from {self.client_address[0]}: {body[:200]!r}")
             self._send_json({"status": "received"})
         elif self.path.startswith("/exfil"):
             stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-            out = os.path.join(EXFIL_DIR, f"exfil_https_{stamp}.bin")
+            out = os.path.join(EXFIL_DIR, f"exfil_https_{stamp}_{next(_exfil_counter):04d}.bin")
             with open(out, "wb") as f:
                 f.write(body)
             log(f"exfil POST from {self.client_address[0]}: {len(body)} bytes -> {out}")
