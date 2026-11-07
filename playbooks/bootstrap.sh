@@ -20,6 +20,11 @@ if [ "${SKIP_INSTALL:-0}" != "1" ]; then
     apt-get update -qq
     apt-get install -y --no-install-recommends \
         nmap curl dnsutils iproute2 python3 coreutils ca-certificates >/dev/null
+
+    # Versions are not pinned (Kali rolling drops old ones), so record what was
+    # actually installed to make a run reproducible/auditable after the fact.
+    mkdir -p "${RESULTS_DIR:-/home/root/results}"
+    dpkg-query -W -f='${Package}=${Version}\n' | sort > "${RESULTS_DIR:-/home/root/results}/installed-packages-bootstrap.txt"
 fi
 
 echo "[bootstrap] aliasing $METADATA_IP onto loopback..."

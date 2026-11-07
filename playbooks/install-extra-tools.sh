@@ -15,4 +15,9 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
     zip unzip sqlite3 sshpass openssh-client netcat-traditional >/dev/null
 
+# Versions are not pinned (Kali rolling drops old ones), so record what was
+# actually installed to make a run reproducible/auditable after the fact.
+mkdir -p "${RESULTS_DIR:-/home/root/results}"
+dpkg-query -W -f='${Package}=${Version}\n' | sort > "${RESULTS_DIR:-/home/root/results}/installed-packages-install-extra-tools.txt"
+
 echo "[install-extra-tools] done."

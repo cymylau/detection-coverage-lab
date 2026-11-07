@@ -70,7 +70,11 @@ docker save -o "$EXPORT_TAR" "$IMAGE_TAG" 2>&1 | tee -a "$LOG"
 # extension); older Docker emits per-layer <id>/layer.tar. Handle both by
 # just trying every entry as a gzip-or-plain tar and grepping its contents.
 FOUND=""
-for entry in $(tar -tf "$EXPORT_TAR" 2>/dev/null | grep -E '(blobs/sha256/.+|/layer\.tar)$'); do
+# Scan only the layer archives named in manifest.json. Scanning every blob
+# also matches the image config JSON, which merely quotes the RUN command.
+LAYERS="$(tar -xOf "$EXPORT_TAR" manifest.json 2>/dev/null \
+    | python3 -c 'import json,sys; print("\n".join(l for m in json.load(sys.stdin) for l in m["Layers"]))')"
+for entry in $LAYERS; do
     # Blobs may be gzip-compressed (older docker) or plain tar (newer docker
     # with containerd snapshotter) — try gunzip, fall back to raw bytes.
     # Two separate extractions (not a shell variable) to stay binary-safe.

@@ -27,6 +27,11 @@ fi
 docker version >/dev/null 2>&1 && echo "[install-container-tools] docker-sandbox reachable at \$DOCKER_HOST=$DOCKER_HOST" \
     || echo "[install-container-tools] !! could not reach \$DOCKER_HOST=$DOCKER_HOST yet — it may still be starting, retry in a few seconds"
 
+# Versions are not pinned (Kali rolling drops old ones), so record what was
+# actually installed to make a run reproducible/auditable after the fact.
+mkdir -p "${RESULTS_DIR:-/home/root/results}"
+dpkg-query -W -f='${Package}=${Version}\n' | sort > "${RESULTS_DIR:-/home/root/results}/installed-packages-install-container-tools.txt"
+
 # The sandbox has no egress once the network is locked down, so pre-pull the
 # only image the scenarios use (they reference alpine:3.20).
 echo "[install-container-tools] pre-pulling alpine:3.20 into docker-sandbox..."

