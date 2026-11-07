@@ -27,4 +27,9 @@ fi
 docker version >/dev/null 2>&1 && echo "[install-container-tools] docker-sandbox reachable at \$DOCKER_HOST=$DOCKER_HOST" \
     || echo "[install-container-tools] !! could not reach \$DOCKER_HOST=$DOCKER_HOST yet — it may still be starting, retry in a few seconds"
 
+# The sandbox has no egress once the network is locked down, so pre-pull the
+# only image the scenarios use (they reference alpine:3.20).
+echo "[install-container-tools] pre-pulling alpine:3.20 into docker-sandbox..."
+docker pull -q alpine:3.20 >/dev/null
+
 echo "[install-container-tools] done."

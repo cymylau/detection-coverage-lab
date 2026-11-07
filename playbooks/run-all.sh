@@ -38,11 +38,18 @@ stage() { echo "" | tee -a "$LOG"; say "########## $* ##########"; }
 say "Northline :: run-all :: session=$SESSION"
 say "this runs setup, then every scenario script, start to finish."
 
-stage "SETUP 1/2 — bootstrap.sh"
-bash "$HERE/bootstrap.sh" 2>&1 | tee -a "$LOG"
+# SKIP_SETUP=1: tools are already installed (run-everything.sh does setup
+# first, then locks down the network, then calls this).
+if [ "${SKIP_SETUP:-0}" = "1" ]; then
+    say "SKIP_SETUP=1 — skipping package installs (already done); ensuring IMDS is up"
+    SKIP_INSTALL=1 bash "$HERE/bootstrap.sh" 2>&1 | tee -a "$LOG"
+else
+    stage "SETUP 1/2 — bootstrap.sh"
+    bash "$HERE/bootstrap.sh" 2>&1 | tee -a "$LOG"
 
-stage "SETUP 2/2 — install-extra-tools.sh"
-bash "$HERE/install-extra-tools.sh" 2>&1 | tee -a "$LOG"
+    stage "SETUP 2/2 — install-extra-tools.sh"
+    bash "$HERE/install-extra-tools.sh" 2>&1 | tee -a "$LOG"
+fi
 
 stage "SCENARIOS — run-full-chain.sh (seeds decoys + every run-*.sh)"
 bash "$HERE/run-full-chain.sh" 2>&1 | tee -a "$LOG"

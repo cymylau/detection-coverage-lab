@@ -44,6 +44,14 @@ Recommended workflow:
    down -v`), then **delete the VM**.
 
 Never run it on a workstation, shared server, or production system.
+The privileged Docker-in-Docker sandbox shares the host kernel, so it is
+not a security boundary: the disposable VM is the only real isolation.
+`northline-net` is `internal: true` (no internet or host access); only the
+setup phase uses a separate `setup-net` for installs, and
+`lock-down-network.sh` removes it before scenarios run. If you run
+scenarios by hand rather than via `run-everything.sh`, run
+`bash lock-down-network.sh` after installing tools. Destructive playbooks
+refuse to run outside the `ops-console` container (`LAB_CONTAINER=1`).
 Never publish any of its ports or attach it to a network you don't
 control. Provided as-is, with no warranty; you run it at your own risk
 (see `LICENSE`). To report a problem, see `SECURITY.md`.
@@ -57,6 +65,7 @@ control. Provided as-is, with no warranty; you run it at your own risk
 | `services/metadata_api.py` | decoy cloud instance-metadata service, serves decoy IAM creds |
 | `services/dns_sink.py` | DNS sink; logs queries, reassembles DNS-tunnel exfil |
 | `services/control_api.py` | decoy C2/cloud API: beacon/tasking, mining-pool, cloud-identity, and logging-control endpoints |
+| `lock-down-network.sh` | host-side: removes the setup-phase egress network so scenarios run with no internet access (`run-everything.sh` calls it for you) |
 | `playbooks/` | setup + one script per scenario (table below) |
 
 ## Run everything, one command

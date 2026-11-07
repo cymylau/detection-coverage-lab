@@ -52,7 +52,7 @@ ENV DECOY_API_KEY="DECOY-BAKED-IN-SECRET-NOT-REAL-00000000"
 RUN echo "DECOY-SECRET-FILE-CONTENT-NOT-REAL-11111111" > /tmp/build-secret.txt \
     && echo "(secret file exists in this layer)"
 RUN rm -f /tmp/build-secret.txt
-RUN apk add --no-cache ca-certificates
+RUN echo layer-without-network-access
 EOF
 docker build -q -t "$IMAGE_TAG" "$BUILD_DIR" 2>&1 | tee -a "$LOG"
 

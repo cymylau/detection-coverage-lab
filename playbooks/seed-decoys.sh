@@ -11,6 +11,9 @@
 # Run inside the ops-console container:  bash playbooks/seed-decoys.sh
 set -u
 
+source "$(cd "$(dirname "$0")" && pwd)/lib-guard.sh"
+require_lab_container
+
 HOME_DIR="${HOME:-/home/root}"
 DECOY_DIR="${DECOY_DIR:-${HOME_DIR}/decoy-data}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
@@ -18,13 +21,23 @@ SA_DIR="/var/run/secrets/kubernetes.io/serviceaccount"
 
 say() { echo "[seed-decoys] $*"; }
 
+MANIFEST="${HOME_DIR}/.northline-seeded"
+# Record each path this script creates, so --cleanup removes ONLY those and
+# never a pre-existing real file.
+record() { echo "$1" >> "$MANIFEST"; }
+
 cleanup() {
     say "removing decoy artifacts..."
-    rm -rf "${HOME_DIR}/.ssh/id_rsa" "${HOME_DIR}/.ssh/id_rsa.pub" \
-           "${HOME_DIR}/.aws" \
-           "${HOME_DIR}/.mozilla_decoy" \
-           "$DECOY_DIR" \
-           "$SA_DIR"
+    if [ -f "$MANIFEST" ]; then
+        while IFS= read -r path; do
+            [ -n "$path" ] && rm -rf -- "$path"
+        done < "$MANIFEST"
+        rm -f -- "$MANIFEST"
+        # drop dirs we may have created, only if now empty
+        rmdir "${HOME_DIR}/.ssh" "${HOME_DIR}/.aws" 2>/dev/null || true
+    else
+        say "no manifest at $MANIFEST — nothing this script created, removing nothing"
+    fi
     say "done."
 }
 
@@ -33,11 +46,14 @@ if [ "${1:-}" = "--cleanup" ]; then
     exit 0
 fi
 
+[ -e "$DECOY_DIR" ] || record "$DECOY_DIR"
+[ -e "${HOME_DIR}/.mozilla_decoy" ] || record "${HOME_DIR}/.mozilla_decoy"
 mkdir -p "${HOME_DIR}/.ssh" "${HOME_DIR}/.aws" "${HOME_DIR}/.mozilla_decoy" \
          "${DECOY_DIR}/documents"
 
 # --- Decoy SSH key (NOT a real keypair, just key-shaped bytes) -------------
 if [ ! -f "${HOME_DIR}/.ssh/id_rsa" ]; then
+    record "${HOME_DIR}/.ssh/id_rsa"; record "${HOME_DIR}/.ssh/id_rsa.pub"
     {
         echo "-----BEGIN OPENSSH PRIVATE KEY-----"
         echo "RURSLUxBQi1ERUNPWS1OT1QtQS1SRUFMLUtFWS1EBE0tTk9ULURFQ1JZUFQtTUU"
@@ -52,6 +68,7 @@ fi
 
 # --- Decoy cloud credentials file ------------------------------------------
 if [ ! -f "${HOME_DIR}/.aws/credentials" ]; then
+    record "${HOME_DIR}/.aws/credentials"
     cat > "${HOME_DIR}/.aws/credentials" <<'EOF'
 [default]
 aws_access_key_id = AKIA_DECOY_DO_NOT_USE
@@ -97,6 +114,7 @@ say "seeded $(ls "${DECOY_DIR}/documents" | wc -l) decoy documents -> ${DECOY_DI
 
 # --- Decoy Kubernetes service-account token (real mount path, decoy content) --
 if [ ! -f "${SA_DIR}/token" ]; then
+    [ -e "$SA_DIR" ] || record "$SA_DIR"
     mkdir -p "$SA_DIR"
     # Header/payload are real-looking base64url JWT shapes but decode to decoy
     # text, not a signed token — not usable against any real API server.

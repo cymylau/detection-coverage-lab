@@ -15,6 +15,9 @@
 # ---------------------------------------------------------------------------
 set -u
 
+source "$(cd "$(dirname "$0")" && pwd)/lib-guard.sh"
+require_lab_container
+
 HOME_DIR="${HOME:-/home/root}"
 RESULTS_DIR="${RESULTS_DIR:-${HOME_DIR}/results}"
 SESSION="$(date +%s)"

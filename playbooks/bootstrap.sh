@@ -14,14 +14,21 @@ METADATA_IP="${METADATA_IP:-169.254.169.254}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SERVICES="${SERVICES_DIR:-/home/root/services}"
 
-echo "[bootstrap] installing tools..."
-apt-get update -qq
-apt-get install -y --no-install-recommends \
-    nmap curl dnsutils iproute2 python3 coreutils ca-certificates >/dev/null
+# SKIP_INSTALL=1 once the network is locked down (no egress for apt).
+if [ "${SKIP_INSTALL:-0}" != "1" ]; then
+    echo "[bootstrap] installing tools..."
+    apt-get update -qq
+    apt-get install -y --no-install-recommends \
+        nmap curl dnsutils iproute2 python3 coreutils ca-certificates >/dev/null
+fi
 
 echo "[bootstrap] aliasing $METADATA_IP onto loopback..."
 ip addr add "${METADATA_IP}/32" dev lo 2>/dev/null || echo "  (already present)"
 
+if curl -s --max-time 2 "http://${METADATA_IP}/latest/meta-data/" >/dev/null 2>&1; then
+    echo "[bootstrap] decoy IMDS already running — leaving it"
+    exit 0
+fi
 echo "[bootstrap] starting decoy IMDS (decoy credentials) on ${METADATA_IP}:80..."
 IMDS_BIND="$METADATA_IP" nohup python3 "${SERVICES}/metadata_api.py" \
     >/home/root/results/metadata_api.log 2>&1 &

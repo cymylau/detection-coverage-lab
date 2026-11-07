@@ -6,11 +6,15 @@
 # separate file from compose.yml so the base setup stays minimal; add it
 # with -f when you want these scenarios too.
 #
-# docker-sandbox is its own throwaway container: ops-console never touches
-# the real host's /var/run/docker.sock or shares its pid namespace, so
-# everything these scenarios do (including "escaping" in
-# run-docker-socket-escape.sh) stays inside docker-sandbox's own
-# filesystem and namespaces.
+# WARNING: docker-sandbox is `privileged: true` and its Docker API
+# (tcp 2375) has no authentication. A privileged container shares the host
+# kernel and can see host devices, so it is NOT a security boundary: a
+# determined process inside it can escape to the host (mounting host block
+# devices, cgroup v1 release_agent, kernel modules). The scenarios stay
+# inside docker-sandbox by design, but the only real isolation is the
+# disposable VM you run this on. Never run this overlay on a workstation or
+# shared host. Nothing is published to the host, and northline-net is
+# `internal: true`, which limits (does not remove) the blast radius.
 #
 # Usage:
 #   docker compose -f compose.yml -f compose.privileged.yml up -d
@@ -29,11 +33,10 @@ services:
     depends_on:
       - docker-sandbox
 
-  # Disposable nested Docker daemon. privileged:true here is standard for
-  # running Docker-in-Docker and is scoped to this throwaway container:
-  # it does not touch, and has no path to, the real host Docker daemon or
-  # filesystem. Reset by `docker compose down -v` (its storage is ephemeral
-  # anyway: no volume is declared for it).
+  # Disposable nested Docker daemon. privileged:true is required for
+  # Docker-in-Docker but is NOT isolated from the host kernel (see warning
+  # above). No volume is declared, so `docker compose down -v` resets it.
+  # setup-net gives it egress to pull alpine:3.20 during setup only.
   docker-sandbox:
     image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
     container_name: northline-docker-sandbox
@@ -43,3 +46,4 @@ services:
       - DOCKER_TLS_CERTDIR=
     networks:
       - northline-net
+      - setup-net

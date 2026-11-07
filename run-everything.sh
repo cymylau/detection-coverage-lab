@@ -33,11 +33,16 @@ for i in $(seq 1 15); do
     sleep 1
 done
 
-echo "[run-everything] base setup + all base scenarios..."
-$COMPOSE exec ops-console bash playbooks/run-all.sh
-
-echo "[run-everything] privileged-overlay setup..."
+echo "[run-everything] setup phase (needs egress): install tooling..."
+$COMPOSE exec ops-console bash playbooks/bootstrap.sh
+$COMPOSE exec ops-console bash playbooks/install-extra-tools.sh
 $COMPOSE exec ops-console bash playbooks/install-container-tools.sh
+
+echo "[run-everything] locking down network (removing setup-net egress)..."
+COMPOSE="$COMPOSE" bash lock-down-network.sh
+
+echo "[run-everything] all base scenarios..."
+$COMPOSE exec -e SKIP_SETUP=1 ops-console bash playbooks/run-all.sh
 
 echo "[run-everything] all privileged/overlay scenarios..."
 $COMPOSE exec ops-console bash playbooks/run-privileged-chain.sh

