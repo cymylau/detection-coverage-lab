@@ -21,6 +21,11 @@ Stealth profiles (`STEALTH=...`) only make the decoy techniques quieter
 (timing, volume, tooling, naming). They never target, stop, or evade the
 security agent, and are not a vulnerability.
 
+The optional untrusted-fields scenario plants inert marker tokens in fields such
+as a User-Agent or username; it makes no claims about the activity and never
+targets a security agent. Run it only against tools you own or are authorised
+to test.
+
 ## Where to run it
 
 Only on a disposable machine that you will delete afterwards. See the

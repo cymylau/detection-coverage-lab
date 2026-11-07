@@ -9,13 +9,14 @@
 #   bash run-everything.sh                    # MITRE ATT&CK + OWASP Top 10 (default)
 #   bash run-everything.sh --only mitre       # ATT&CK scenarios only
 #   bash run-everything.sh --only owasp       # OWASP Top 10:2025 scenarios only
+#   bash run-everything.sh --only untrusted-fields   # untrusted telemetry-field handling (opt-in, not part of the default run)
 #   bash run-everything.sh --stealth quiet    # quieter attacker: noisy|careful|quiet|covert
 #
 # Options combine, e.g.  bash run-everything.sh --only owasp --stealth careful
 # STEALTH_TIME_SCALE=0.01 shrinks every wait for quick runs.
 #
-# "--only owasp" starts only the base containers (no privileged
-# Docker-in-Docker). Everything else starts the privileged overlay too.
+# "--only owasp" and "--only untrusted-fields" start only the base containers (no
+# privileged Docker-in-Docker). Everything else starts the privileged overlay too.
 #
 # For anything more targeted (one scenario at a time), see docs/REFERENCE.md.
 # ---------------------------------------------------------------------------
@@ -28,14 +29,14 @@ while [ $# -gt 0 ]; do
         --stealth=*) export STEALTH="${1#*=}"; shift ;;
         --only) [ $# -ge 2 ] || { echo "--only needs a value" >&2; exit 2; }; ONLY="$2"; shift 2 ;;
         --only=*) ONLY="${1#*=}"; shift ;;
-        -h|--help) sed -n 2,20p "$0"; exit 0 ;;
+        -h|--help) sed -n 2,22p "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 case "${STEALTH:-noisy}" in noisy|careful|quiet|covert|0|1|2|3) ;; *)
     echo "invalid STEALTH='${STEALTH}' — valid: noisy careful quiet covert" >&2; exit 2 ;; esac
-case "$ONLY" in all|mitre|owasp) ;; *)
-    echo "invalid --only '$ONLY' — valid: all mitre owasp" >&2; exit 2 ;; esac
+case "$ONLY" in all|mitre|owasp|untrusted-fields) ;; *)
+    echo "invalid --only '$ONLY' — valid: all mitre owasp untrusted-fields" >&2; exit 2 ;; esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
@@ -43,7 +44,7 @@ cd "$HERE"
 # Create results/ as the invoking user (otherwise Docker creates it as root).
 mkdir -p results
 
-if [ "$ONLY" = owasp ]; then
+if [ "$ONLY" = owasp ] || [ "$ONLY" = untrusted-fields ]; then
     COMPOSE="docker compose -f compose.yml"
     WHAT="base containers only"
 else
@@ -67,6 +68,8 @@ echo "[run-everything] setup phase (needs egress): install tooling..."
 $COMPOSE exec ops-console bash playbooks/bootstrap.sh
 if [ "$ONLY" != owasp ]; then
     $COMPOSE exec ops-console bash playbooks/install-extra-tools.sh
+fi
+if [ "$ONLY" != owasp ] && [ "$ONLY" != untrusted-fields ]; then
     $COMPOSE exec ops-console bash playbooks/install-container-tools.sh
 fi
 
@@ -76,6 +79,9 @@ COMPOSE="$COMPOSE" bash lock-down-network.sh
 if [ "$ONLY" = owasp ]; then
     echo "[run-everything] OWASP Top 10:2025 scenarios..."
     $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-owasp-top10.sh
+elif [ "$ONLY" = untrusted-fields ]; then
+    echo "[run-everything] untrusted-field handling scenario..."
+    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-untrusted-fields.sh
 else
     SKIP_OWASP=0; [ "$ONLY" = mitre ] && SKIP_OWASP=1
     echo "[run-everything] base scenarios..."

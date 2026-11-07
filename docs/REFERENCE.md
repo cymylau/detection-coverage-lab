@@ -2,7 +2,7 @@
 
 Everything beyond the quick-start guide in the [README](../README.md).
 
-Contents: [The activity log](#the-activity-log) · [Safety design](#safety-design) · [Components](#components) ·
+Contents: [The activity log](#the-activity-log) · [Untrusted-field handling](#untrusted-field-handling) · [Safety design](#safety-design) · [Components](#components) ·
 [Running pieces separately](#running-pieces-separately) ·
 [Stealth profiles](#stealth-profiles) ·
 [OWASP Top 10:2025 scenarios](#owasp-top-10-2025-scenarios) ·
@@ -49,6 +49,38 @@ behaviour in your telemetry. Technique names come from
 `playbooks/techniques.tsv`. `activity.jsonl` accumulates across runs; the
 report from `run-everything.sh` covers only that run.
 
+## Untrusted-field handling
+
+`run-everything.sh --only untrusted-fields` (or `playbooks/run-untrusted-fields.sh`)
+checks how a tool treats strings an attacker controls. It is optional and not
+part of the default run.
+
+Four carriers each do the same real action twice, a few seconds apart, as a
+**control** (ordinary value) and **marked** (same value plus an inert token,
+`MARK-DECOY-<session>-<n>`): HTTP User-Agent (UFLD-01), SSH username
+(UFLD-02), `argv[0]` of a renamed binary (UFLD-03), archive file name
+(UFLD-04). The activity log records `pair`, `variant` (`control`/`marked`) and
+`marker` for these rows.
+
+`playbooks/untrusted-fields-report.py --tool-output <file-or-folder>` scans an
+export from your tool for the marker tokens and writes
+`results/untrusted_fields_scorecard.csv`. A marker in the export means the field
+was preserved and surfaced. The judgements that matter (was it presented as
+quoted untrusted data; was the verdict the same as for the control run) are left
+blank for you.
+
+Notes from building it:
+- Recent OpenSSH (`PerSourcePenalties`) drops new connections from an address for
+  about 20 seconds after a failed login, so the scenario waits 22 real seconds
+  (not scaled by `STEALTH_TIME_SCALE`) before the marked SSH attempt. The
+  `result` field in the activity log records whether each attempt reached sshd.
+- The OpenSSH client rejects some characters in a username, which is why the
+  marker is a single plain token.
+
+What good looks like: attacker-controlled fields are preserved verbatim, clearly
+labelled as untrusted, never treated as instructions or as evidence about the
+activity, and the verdict does not depend on their content.
+
 ## Safety design
 
 This lab intentionally runs attacker-style behaviour and weak
@@ -93,6 +125,7 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 | `playbooks/lib-stealth.sh` | stealth profile definitions and helpers |
 | `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: recording, table/CSV report, technique names |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
+| `playbooks/run-untrusted-fields.sh`, `playbooks/untrusted-fields-report.py` | optional untrusted-telemetry-field scenario and its marker checker |
 | `playbooks/run-owasp-top10.sh` | OWASP Top 10:2025 application-attack scenarios |
 
 ## Running pieces separately

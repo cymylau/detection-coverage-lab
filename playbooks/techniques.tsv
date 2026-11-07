@@ -41,3 +41,7 @@ OWASP-A07	OWASP A07:2025 Authentication Failures
 OWASP-A08	OWASP A08:2025 Software or Data Integrity Failures
 OWASP-A09	OWASP A09:2025 Security Logging and Alerting Failures
 OWASP-A10	OWASP A10:2025 Mishandling of Exceptional Conditions
+UFLD-01	Untrusted field: marker in an HTTP User-Agent
+UFLD-02	Untrusted field: marker in an SSH username
+UFLD-03	Untrusted field: marker in a process argv[0]
+UFLD-04	Untrusted field: marker in a file name

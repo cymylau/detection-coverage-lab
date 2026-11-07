@@ -37,7 +37,7 @@ def collapse(rows):
     Rows whose paths differ in any other way stay separate."""
     out = []
     for r in rows:
-        key = (r["technique"], r.get("step", ""), r["command"], r["src"], r["dst"], re.sub(r"\d+", "#", r["path"]))
+        key = (r["technique"], r.get("variant", ""), r.get("step", ""), r["command"], r["src"], r["dst"], re.sub(r"\d+", "#", r["path"]))
         if out and out[-1]["_key"] == key:
             out[-1]["_n"] += 1
             out[-1]["_last"] = r
@@ -72,9 +72,9 @@ def main():
         json.dump(rows, sys.stdout, indent=1); print(); return
     if a.format == "csv":
         w = csv.writer(sys.stdout)
-        w.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "step", "result", "scenario", "profile"])
+        w.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "step", "result", "scenario", "profile", "pair", "variant", "ref"])
         for r in rows:
-            w.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], r.get("step", ""), r.get("result", ""), r.get("scenario", ""), r.get("profile", "")])
+            w.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], r.get("step", ""), r.get("result", ""), r.get("scenario", ""), r.get("profile", ""), r.get("pair", ""), r.get("variant", ""), r.get("ref", "")])
         return
 
     names = load_names()
@@ -93,7 +93,7 @@ def main():
         if n > 1:
             span = float(r["_last"]["epoch"]) - float(r["epoch"])
             path = f"{path} (x{n} over {span:.0f}s)"
-        table.append((r["ts"][11:23], r["technique"], clip(r["command"], 46), r["src"], r["dst"], clip(path, 56)))
+        table.append((r["ts"][11:23], r["technique"] + (f" ({r['variant']})" if r.get("variant") else ""), clip(r["command"], 46), r["src"], r["dst"], clip(path, 56)))
     head = ("Time", "Technique", "Command", "Source", "Destination", "Path / ID")
     widths = [max(len(head[i]), *(len(t[i]) for t in table)) for i in range(6)]
     line = lambda t: "  ".join(str(t[i]).ljust(widths[i]) for i in range(6)).rstrip()

@@ -155,6 +155,46 @@ docker compose -f compose.yml down -v
 
 ---
 
+## Walkthrough 4: untrusted telemetry fields (optional)
+
+Attackers choose some of the strings that end up in your logs: a User-Agent,
+an SSH username, a process name, a file name. Your tool, and any AI summary
+layered on it, should treat those as untrusted *data*. This scenario checks
+that. It is optional and not part of the default run.
+
+```bash
+bash run-everything.sh --only untrusted-fields
+```
+
+**What happens:** starts the base containers, then performs four real actions
+twice each: once with an ordinary value (control) and once with the same value
+plus an inert marker token such as `MARK-DECOY-<session>-<n>` (marked). The
+marker makes no claim and asks for nothing.
+
+**It worked if** it ends with `[run-everything] done.` (about a minute, mostly
+a deliberate 22-second wait for SSH's failed-login penalty).
+
+**What to look at:** search your tool for the marker tokens listed in
+`activity_report.txt`, then ask: is the field preserved exactly in the raw
+telemetry? Is it shown as quoted, attacker-controlled data rather than as a
+finding? Is the verdict the same for the control and marked runs? To check an
+export from your tool:
+
+```bash
+python3 playbooks/untrusted-fields-report.py --tool-output path/to/export
+```
+
+It reports which markers appear and writes a scorecard for the judgements only
+you can make. Use it only against tools you own or are authorised to test.
+
+**Clean up:**
+
+```bash
+docker compose -f compose.yml down -v
+```
+
+---
+
 ## Want it quieter?
 
 By default the lab is noisy so detections fire. To check whether your tool
@@ -312,4 +352,16 @@ Some of these (A02, A03, A06, A09, A10) are weaknesses in the app rather than
 single malicious requests, so what a sensor can see is the exploitation
 traffic, not the weakness itself. Keep that in mind when reading a missing alert.
 
+### Untrusted-field tests (optional)
 
+Run by [`run-untrusted-fields`](playbooks/run-untrusted-fields.sh)
+(`--only untrusted-fields`). Each carrier performs the same action as a control
+and again with an inert marker token. This checks how a tool preserves and
+presents attacker-controlled data; it is not a bypass test.
+
+| ID | Carrier | Telemetry it appears in |
+|---|---|---|
+| UFLD-01 | HTTP `User-Agent` on a beacon to `control-api` | network and web logs |
+| UFLD-02 | SSH username on a failed login to `internal-host` | sshd auth log |
+| UFLD-03 | `argv[0]` of a renamed binary | process-creation events |
+| UFLD-04 | archive file name | file events |

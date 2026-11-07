@@ -12,6 +12,7 @@
 #   src / dst       source and destination container (compose service) names
 #   path            URL path, file path, DNS name, or other unique identifier
 #   result          exit status or note (optional)
+#   pair/variant/ref  only for paired runs (untrusted-fields scenario): pair id, control|marked, marker token
 #   scenario/profile  which playbook, which stealth profile
 #
 # Pure bash on purpose: logging must not spawn extra processes, or the
@@ -54,9 +55,13 @@ act() {
     local f="${RESULTS_DIR:-/home/root/results}/activity.jsonl" ts="${EPOCHREALTIME:-0.0}" secs ms stamp
     secs="${ts%.*}"; ms="${ts#*.}"; ms="${ms:0:3}"
     printf -v stamp '%(%Y-%m-%dT%H:%M:%S)T' "$secs"
-    printf '{"ts":"%s.%sZ","epoch":%s,"scenario":"%s","profile":"%s","technique":"%s","step":"%s","command":"%s","src":"%s","dst":"%s","path":"%s","result":"%s"}\n' \
+    # optional paired-run fields (untrusted-fields scenario): ACT_PAIR / ACT_VARIANT / ACT_REF
+    local pairs=""
+    [ -n "${ACT_PAIR:-}" ] && printf -v pairs ',"pair":"%s","variant":"%s","ref":"%s"' \
+        "$(_act_je "$ACT_PAIR")" "$(_act_je "${ACT_VARIANT:-}")" "$(_act_je "${ACT_REF:-}")"
+    printf '{"ts":"%s.%sZ","epoch":%s,"scenario":"%s","profile":"%s","technique":"%s","step":"%s","command":"%s","src":"%s","dst":"%s","path":"%s","result":"%s"%s}\n' \
         "$stamp" "$ms" "$ts" "$ACT_SCENARIO" "${STEALTH_NAME:-noisy}" "$(_act_je "$tech")" "$(_act_je "$step")" \
-        "$(_act_je "$cmd")" "$LAB_NODE" "$(_act_je "$(act_dst "$dst")")" "$(_act_je "$path")" "$(_act_je "$result")" \
+        "$(_act_je "$cmd")" "$LAB_NODE" "$(_act_je "$(act_dst "$dst")")" "$(_act_je "$path")" "$(_act_je "$result")" "$pairs" \
         >> "$f" 2>/dev/null || true
 }
 act_here() { act "$ST_TECH" "$1" "$LAB_NODE" "${2:-}" "${3:-}"; }
