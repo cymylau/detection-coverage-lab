@@ -40,8 +40,8 @@ server or a production system. Provided as-is, with no warranty (see
 ## Get it
 
 ```bash
-git clone https://github.com/cymylau/edr-test-lab.git
-cd edr-test-lab
+git clone https://github.com/cymylau/detection-coverage-lab.git
+cd detection-coverage-lab
 ```
 
 Run every command below from this folder, in your host shell (not inside
