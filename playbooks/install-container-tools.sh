@@ -12,11 +12,15 @@
 set -eu
 
 echo "[install-container-tools] installing docker CLI + util-linux..."
-apt-get update -qq
+apt-get -o Acquire::Retries=3 update -qq || {
+    echo "[install-container-tools] !! apt-get update failed: the package mirrors are unreachable." >&2
+    echo "[install-container-tools]    If an earlier run already locked the network down, start clean with:" >&2
+    echo "[install-container-tools]    bash run-everything.sh --down   (then run again)" >&2
+    exit 1; }
 # docker-cli is the client binary; docker.io pulls in dockerd/docker-proxy
 # too, which we don't need here (DOCKER_HOST points at docker-sandbox) but
 # it's harmless to have installed and is a dependency on some distros.
-apt-get install -y --no-install-recommends docker-cli util-linux >/dev/null
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends docker-cli util-linux >/dev/null
 
 echo "[install-container-tools] verifying DOCKER_HOST is reachable..."
 if [ -z "${DOCKER_HOST:-}" ]; then
@@ -24,8 +28,14 @@ if [ -z "${DOCKER_HOST:-}" ]; then
     echo "    docker compose -f compose.yml -f compose.privileged.yml up -d"
     exit 1
 fi
-docker version >/dev/null 2>&1 && echo "[install-container-tools] docker-sandbox reachable at \$DOCKER_HOST=$DOCKER_HOST" \
-    || echo "[install-container-tools] !! could not reach \$DOCKER_HOST=$DOCKER_HOST yet — it may still be starting, retry in a few seconds"
+# docker-sandbox's daemon takes a few seconds to start after `compose up`
+for _ in $(seq 1 30); do docker version >/dev/null 2>&1 && break; sleep 1; done
+if docker version >/dev/null 2>&1; then
+    echo "[install-container-tools] docker-sandbox reachable at \$DOCKER_HOST=$DOCKER_HOST"
+else
+    echo "[install-container-tools] !! could not reach \$DOCKER_HOST=$DOCKER_HOST after 30s — check: docker compose -f compose.yml -f compose.privileged.yml logs docker-sandbox" >&2
+    exit 1
+fi
 
 # Versions are not pinned (Kali rolling drops old ones), so record what was
 # actually installed to make a run reproducible/auditable after the fact.

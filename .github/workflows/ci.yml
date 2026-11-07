@@ -23,11 +23,15 @@ jobs:
         run: python3 -m py_compile services/*.py playbooks/*.py tests/*.py
       - name: Compose files are valid
         run: docker compose -f compose.yml -f compose.privileged.yml config -q
+      - name: Unit tests (reporting, scoring, confirmation, selection)
+        run: python3 -m unittest discover -s tests -v
       - name: Docs match the code
         run: python3 tests/check-docs.py
-      - name: ShellCheck (informational)
-        # Not blocking yet: the scripts have not been through ShellCheck before.
-        # Tighten to `-S error` and drop continue-on-error once it is clean.
+      - name: ShellCheck (errors block)
+        run: shellcheck -S error run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh
+      - name: ShellCheck (warnings, informational)
+        # The remaining warnings are mostly variables used by the scripts that
+        # source lib-stealth.sh; shown for review, not blocking.
         continue-on-error: true
         run: shellcheck -S warning run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh
 
@@ -56,6 +60,23 @@ jobs:
           print(f"{len(rows)} actions, all OWASP categories exercised, every remote action confirmed")
           PY
           test -s results/activity_report.txt
+          python3 -c 'import json,sys; r=json.load(open("results/last_run.json")); print(r); sys.exit(r["status"] != "ok")'
+      - name: Re-run one technique on the same lab (no teardown in between)
+        # Exercises --technique selection, re-using a locked-down lab, the
+        # readiness wait, and the egress check in lock-down-network.sh.
+        run: bash run-everything.sh --technique T1552.005
+      - name: Check the re-run
+        run: |
+          python3 - <<'PY'
+          import json
+          r = json.load(open("results/last_run.json"))
+          assert r["status"] == "ok" and r["stages"], r
+          rows = [json.loads(l) for l in open("results/activity_confirmed.jsonl")]
+          techs = {x["technique"] for x in rows}
+          assert "T1552.005" in techs, techs
+          assert not [x for x in rows if x.get("observed") == "NO"], "an action never reached its destination"
+          print(f"re-run ok: {len(rows)} actions, stages: {[s['name'] for s in r['stages']]}")
+          PY
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

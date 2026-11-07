@@ -98,8 +98,20 @@ detected, partly detected or missed.
   alert names the same technique (a parent such as `T1552` matches `T1552.005`).
   **Partial** means an alert fired in the window but named no technique or a
   different one, so it may be unrelated; confirm by hand. **Missed** means no alert.
+- **Which run:** `activity.jsonl` accumulates across runs, so by default only the
+  latest `run-everything.sh` run is scored (its start time comes from
+  `results/last_run.json`). `--since EPOCH` picks a different start; `--all-runs`
+  scores everything.
+- **Local-time exports:** times without a zone are read as UTC. If your console
+  exports local time, add `--time-offset HOURS` (`1` for UTC+1, `-5` for UTC-5).
 - **Output:** a summary table, `--csv` for per-action detail, and `--layer` for an
-  ATT&CK Navigator layer. Options: `--since EPOCH` to limit to one run.
+  ATT&CK Navigator layer.
+
+It warns (on stderr) when alert rows have no recognisable time field, when no
+alerts could be read at all, and when none of the alerts fall inside the run's
+time range: the usual causes of an "everything missed" result that is really an
+export or time-zone problem. A bare number is never taken as a time unless it is
+in a time-named field, so numeric alert IDs are not mistaken for timestamps.
 
 A noisy tool that fires generic alerts will show many `partial` results. Treat
 `detected` as the reliable column and review `partial` by hand.
@@ -138,13 +150,36 @@ container-name clashes before starting (`--check` does only that). `--down`
 removes the lab; `--reset` also clears `./results` after asking (`--yes` skips
 the question).
 
-`.github/workflows/ci.yml` runs on every push and pull request: shell syntax,
-Python compile, compose validation, and `tests/check-docs.py`, which fails if the
-README's test list disagrees with what the scripts record, a technique has no
-name, or a local link or anchor is broken (`--online` also checks external
-links). A smoke job then runs the OWASP scenarios and fails if any web-app
-category was not exercised or an action never reached its destination. ShellCheck
-runs too but is informational until the scripts have been cleaned up for it.
+**During a run** it waits until every service is listening before the scenarios
+start. It checks each container's own socket table, so the readiness check puts
+no traffic on the network. After lock-down it checks that no lab container still
+has a default route, and stops before any scenario if one does.
+
+**At the end** it prints a stage summary (`ok` or `FAILED (exit N)` for each
+scenario script) and writes `results/last_run.json`: start and end time,
+`--only`, stealth profile and each stage's exit code. One failed scenario does
+not stop the others. The ownership fix, destination confirmation and activity
+report still run, and the command exits non-zero. The last line is
+`[run-everything] done.` only when every stage passed. Inside the chains
+(`run-full-chain.sh`, `run-privileged-chain.sh`) each scenario's exit code is
+recorded the same way and printed as a table at the end of the chain's log.
+
+`.github/workflows/ci.yml` runs on every push and pull request. The lint job
+covers:
+- shell syntax and Python compile;
+- compose validation;
+- ShellCheck at error level (warnings are shown but do not fail);
+- `tests/test_tools.py`, unit tests for the reporting, scoring, confirmation
+  and selection tools (`python3 -m unittest discover -s tests`, no Docker
+  needed);
+- `tests/check-docs.py`, which fails if the README's test list disagrees with
+  what the scripts record, a technique has no name, a `run-everything.sh` option
+  is undocumented, or a local link or anchor is broken (`--online` also checks
+  external links).
+
+A smoke job then runs the OWASP scenarios, then `--technique T1552.005` on the
+same lab without tearing it down. It fails if any web-app category was not
+exercised, an action never reached its destination, or a stage failed.
 
 ## Safety design
 
@@ -159,8 +194,12 @@ configurations, so safety comes from how it is contained:
 - **Internal network.** `cymylau-net` is `internal: true`: no internet,
   no route to the Docker host. Only the setup phase uses a separate
   `setup-net` for installs, and `lock-down-network.sh` removes it before
-  any scenario runs (`run-everything.sh` does this for you). If you run
-  scenarios by hand, run `bash lock-down-network.sh` after installing tools.
+  any scenario runs (`run-everything.sh` does this for you). It disconnects
+  *every* container attached to the project's `setup-net` (ops-console and,
+  with the overlay, docker-sandbox), whichever compose files you used. It then
+  checks that no lab container still has a default route, and exits non-zero
+  if one does. If you run scenarios by hand, run `bash lock-down-network.sh`
+  after installing tools and check that it ends with `egress removed`.
 - **No published ports.** Nothing is reachable from outside the VM.
 - **Decoys only.** Every credential, key, token and document is fabricated
   and marked `DECOY`.
@@ -180,8 +219,8 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 |---|---|
 | `compose.yml` | base setup: `ops-console` (Kali attacker box), `dns-sink`, `control-api`, `internal-host`, `web-portal` (decoy vulnerable web app) |
 | `compose.privileged.yml` | overlay adding a Docker-in-Docker sandbox for the container-escape scenarios, see its header |
-| `run-everything.sh` | host-side one-command runner (`--only`, `--stealth`) |
-| `lock-down-network.sh` | host-side: removes the setup-phase egress network so scenarios run with no internet access |
+| `run-everything.sh` | host-side one-command runner (`--only`, `--stealth`, `--technique`, ...); stage summary, `results/last_run.json` |
+| `lock-down-network.sh` | host-side: disconnects every container from the setup-phase egress network, then verifies that no lab container has a default route |
 | `services/metadata_api.py` | decoy cloud instance-metadata service, serves decoy IAM creds |
 | `services/dns_sink.py` | DNS sink; logs queries, reassembles DNS-tunnel exfil |
 | `services/control_api.py` | decoy C2/cloud API: beacon/tasking, mining-pool, cloud-identity, logging-control and decoy-package endpoints |
@@ -191,7 +230,8 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 | `playbooks/detection-report.py` | scores an alert export against the activity log; writes an ATT&CK Navigator layer |
 | `playbooks/observe.py` | confirms each action in the destination's own logs |
 | `playbooks/scenario-index.py` | maps techniques and tactics to scripts for `--technique` / `--tactic` |
-| `tests/check-docs.py`, `.github/workflows/ci.yml` | docs-vs-code drift check and CI |
+| `tests/check-docs.py`, `tests/test_tools.py`, `.github/workflows/ci.yml` | docs-vs-code drift check, unit tests for the Python tools, and CI |
+| `playbooks/lib-chain.sh` | runs each stage of a chain script, keeps going past a failure, prints a stage summary and sets the exit code |
 | `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: recording, table/CSV report, technique names |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `playbooks/run-untrusted-fields.sh`, `playbooks/untrusted-fields-report.py` | optional untrusted-telemetry-field scenario and its marker checker |
@@ -199,41 +239,59 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 
 ## Running pieces separately
 
-`run-everything.sh --only mitre|owasp` covers the common cases. For
-anything finer, drive the containers yourself. Three levels, from
-broadest to narrowest; each is independent. (After installing tools, run
-`bash lock-down-network.sh` from the host before scenarios.)
+`run-everything.sh` covers the common cases (`--only`, `--technique`,
+`--tactic`) and does the setup, lock-down, readiness checks and reporting for
+you. To drive the containers yourself, set up once and then run whatever you
+like. Run every command from the host, in the repository root.
 
-**All base scenarios:**
-
-```bash
-docker compose up -d
-docker compose exec ops-console bash playbooks/bootstrap.sh
-docker compose exec ops-console bash playbooks/install-extra-tools.sh
-docker compose exec ops-console bash playbooks/run-all.sh
-```
-
-**All overlay scenarios** (the ones marked (overlay) in the table below):
+**1. Set up** (pick the base lab, or base plus the privileged overlay):
 
 ```bash
-docker compose -f compose.yml -f compose.privileged.yml up -d
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/bootstrap.sh
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/install-container-tools.sh
-docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
-    bash playbooks/run-privileged-chain.sh
+mkdir -p results                 # create it as you; otherwise Docker creates it as root
+docker compose up -d                                              # base only
+# or: docker compose -f compose.yml -f compose.privileged.yml up -d   # base + overlay
+
+docker compose exec ops-console bash playbooks/bootstrap.sh            # tools + decoy IMDS
+docker compose exec ops-console bash playbooks/install-extra-tools.sh  # zip, sshpass, ssh, ...
+# overlay only:
+docker compose exec ops-console bash playbooks/install-container-tools.sh
+
+bash lock-down-network.sh        # remove internet access; must end with "egress removed"
+docker compose exec ops-console bash playbooks/seed-decoys.sh          # plant the decoy files
 ```
 
-**One scenario at a time**, against whichever of the above you brought up:
+Plain `docker compose exec ops-console ...` works with the overlay up too, since
+ops-console is defined in `compose.yml`.
+
+**2. Run** a whole chain, or one scenario at a time, in any order and as often as
+you like:
 
 ```bash
-docker compose exec ops-console bash playbooks/run-host-recon.sh
+docker compose exec ops-console bash playbooks/run-full-chain.sh        # every base scenario
+docker compose exec ops-console bash playbooks/run-privileged-chain.sh  # overlay scenarios
+docker compose exec ops-console bash playbooks/run-host-recon.sh        # just one
 ```
 
-Any scenario script can be run on its own this way, in any order, as many
-times as you like; each one is self-contained and writes its own log to
-`./results/`.
+Each scenario writes its own log to `./results/`. Their prerequisites, which
+the setup above covers:
+
+| Needs | Scenarios |
+|---|---|
+| `bootstrap.sh` (the decoy IMDS on 169.254.169.254) | `metadata-exfil` |
+| `seed-decoys.sh` | `credential-discovery`, `collection-staging`, `workload-identity-theft` (`https-exfil` and `untrusted-fields` seed for themselves) |
+| `install-extra-tools.sh` | `lateral-movement`, `ssh-audit-session`, `collection-staging` (zip) |
+| the overlay + `install-container-tools.sh` | `docker-socket-escape`, `privileged-container-abuse`, `image-secret-discovery` |
+
+**3. Report and tear down.** Files written by the containers are owned by root
+on the host. Use `bash run-everything.sh --down` to remove the lab; it also
+hands `./results` back to you. The activity table is printed at the end of each
+scenario. For the combined report and destination confirmation:
+
+```bash
+docker compose exec -T internal-host cat /config/logs/openssh/current > results/server_sshd.log  # else SSH rows show NO
+python3 playbooks/observe.py --results results
+python3 playbooks/activity-report.py results/activity_confirmed.jsonl
+```
 
 ## Stealth profiles
 
@@ -249,10 +307,27 @@ STEALTH_TIME_SCALE=0.01 ...                      # shrink every wait for quick d
 
 | profile | timing | tooling | artifacts |
 |---|---|---|---|
-| `noisy` (default) | 1-4 s beacon jitter, no DNS delay | `nmap`, `curl`, 48-char DNS labels, `sshpass -p`, broad `find`, full recon | obvious names, staged in `results/`, history cleared, timestomp |
+| `noisy` (default) | 1-4 s beacon jitter, no DNS delay, no request pacing | `nmap`, `curl`, 48-char DNS labels, `sshpass -p`, broad `find`, full recon | obvious names, staged in `results/`, history cleared, timestomp |
 | `careful` | 5-15 s jitter, 1-2 s DNS delay | `nmap -T2` on fewer ports, realistic UA, 32-char labels, `sshpass -e`, scoped `find`/SUID search, no `env` dump | staged under `~/.cache`, quieter process name |
 | `quiet` | 30-90 s jitter, 2-5 s DNS delay, niced load | single `/dev/tcp` probe instead of `nmap`, `python3` instead of `curl`, 24-char labels, known-path credential checks, minimal recon | staging copy removed, no history-clear/timestomp |
 | `covert` | 120-300 s jitter, 5-15 s DNS delay | no port scan, 12-char labels | as `quiet`, less obvious binary name |
+
+**How long a run takes.** Timing adds deliberate waits: beacon jitter, a delay
+between DNS queries, and the same delay between OWASP requests. Rough real-time
+totals, worked out from the number of actions each profile performs and the
+average wait:
+
+| timing | everything | `--only mitre` | `--only owasp` |
+|---|---|---|---|
+| `noisy` | about 80 s (measured) | about 80 s | about 30 s |
+| `careful` | about 5 min | about 2 min | about 3 min |
+| `quiet` | about 15 min | about 9 min | about 5 min |
+| `covert` | about 40 min | about 30 min | about 10 min |
+
+`run-everything.sh` prints the estimate when it starts. `STEALTH_TIME_SCALE`
+multiplies every wait (`0.1` makes a covert run take about 5 minutes) but
+compresses the timing your sensors would see, so use it to check the plumbing,
+not to measure stealth.
 
 Override one dimension with `STEALTH_TIMING`, `STEALTH_TOOLING` or
 `STEALTH_ARTIFACTS` (e.g. `STEALTH=quiet STEALTH_TOOLING=noisy`).
@@ -260,6 +335,13 @@ Every action is recorded in the [activity log](#the-activity-log), with
 the profile used, so you can line EDR/CDR alerts up against exactly what
 ran (`stealth_timeline.jsonl` keeps the older, step-level view). The profile table is in one place:
 `playbooks/lib-stealth.sh`.
+
+`run-stealth-sweep.sh` runs the base chain once per profile into
+`results/stealth_<profile>/`. Two limits: the services (`control-api`,
+`dns-sink`, `web-portal`) still log to `results/`, so there is no per-profile
+destination confirmation; and all four profiles back to back take about an hour
+at real timing. It is not wired into `run-everything.sh`; run it inside
+ops-console after the set-up in [Running pieces separately](#running-pieces-separately).
 
 **Scope:** profiles only change *how* the existing decoy techniques are
 performed (timing, volume, tooling, naming, tidiness). They never stop,
