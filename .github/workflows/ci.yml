@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Syntax and docs checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          for f in run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh; do
+            bash -n "$f" || exit 1
+          done
+      - name: Python compiles
+        run: python3 -m py_compile services/*.py playbooks/*.py tests/*.py
+      - name: Compose files are valid
+        run: docker compose -f compose.yml -f compose.privileged.yml config -q
+      - name: Docs match the code
+        run: python3 tests/check-docs.py
+      - name: ShellCheck (informational)
+        # Not blocking yet: the scripts have not been through ShellCheck before.
+        # Tighten to `-S error` and drop continue-on-error once it is clean.
+        continue-on-error: true
+        run: shellcheck -S warning run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh
+
+  smoke:
+    name: Smoke run (OWASP scenarios)
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight
+        run: bash run-everything.sh --check
+      - name: Run the OWASP scenarios
+        run: bash run-everything.sh --only owasp
+      - name: Check the results
+        run: |
+          python3 - <<'PY'
+          import json
+          cats = {json.loads(l)["category"] for l in open("results/webapp_events.jsonl")}
+          missing = {f"A{n:02d}" for n in range(1, 11)} - cats
+          assert not missing, f"no web-app events for {sorted(missing)}"
+          rows = [json.loads(l) for l in open("results/activity_confirmed.jsonl")]
+          not_seen = [r for r in rows if r.get("observed") == "NO"]
+          assert rows, "empty activity log"
+          assert not not_seen, f"{len(not_seen)} action(s) never reached their destination"
+          print(f"{len(rows)} actions, all OWASP categories exercised, every remote action confirmed")
+          PY
+          test -s results/activity_report.txt
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: results/
+          if-no-files-found: ignore
+      - name: Tear down
+        if: always()
+        run: bash run-everything.sh --down
