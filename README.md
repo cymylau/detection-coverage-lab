@@ -72,15 +72,14 @@ It takes about 70 seconds once the images are cached.
 
 | File in `results/` | What it tells you |
 |---|---|
-| `stealth_timeline.jsonl` | every attack step, with a UTC timestamp and its ATT&CK or OWASP ID: line your tool's alerts up against this |
-| `full_chain_*.log` | the ATT&CK scenarios, stage by stage |
-| `privileged_chain_*.log` | the container-escape scenarios |
-| `owasp_*.log` | the OWASP requests and the web app's responses |
-| `webapp_events.jsonl` | what the vulnerable app *really* did for each OWASP request |
+| `activity_report.txt` | **start here**: one table of every attack action (time, technique, command, source container, destination container, path or ID), then a list of every attack covered |
+| `activity.csv` | the same, every row, ready for a spreadsheet or SIEM |
+| `full_chain_*.log`, `privileged_chain_*.log`, `owasp_*.log` | the detailed log of each part, with the same table at the bottom |
+| `webapp_events.jsonl` | what the vulnerable web app *really* did for each OWASP request |
 
 Then open your EDR / CDR / WAF console and compare what it flagged
-against `stealth_timeline.jsonl`. Anything on the timeline that has no
-alert is a detection gap.
+against `activity_report.txt` (all times are UTC). Any row in that table
+with no matching alert is a detection gap.
 
 **Clean up** (then delete the VM):
 
@@ -106,7 +105,7 @@ cryptomining, container escapes and more.
 **It worked if** it ends with `[run-everything] done.` (about 70 seconds)
 and there is no `owasp_*.log` in `results/`.
 
-**What to look at:** `stealth_timeline.jsonl` (step-by-step, with ATT&CK
+**What to look at:** `activity_report.txt` (every action, with ATT&CK
 technique IDs), `full_chain_*.log` and `privileged_chain_*.log`. The
 full technique list is in the
 [ATT&CK coverage table](docs/REFERENCE.md#mitre-attck-coverage), so you
@@ -139,9 +138,9 @@ read, a deserialization) but every payload is inert and tagged `DECOY`.
 **It worked if** it ends with `[run-everything] done.` (about 30 seconds)
 and `results/webapp_events.jsonl` has events for `A01` through `A10`.
 
-**What to look at:** `owasp_*.log` (your requests and the responses),
-`webapp_events.jsonl` (ground truth for each request) and
-`stealth_timeline.jsonl`. Some categories (injection, access control,
+**What to look at:** `activity_report.txt` (every request, with its OWASP
+category), `owasp_*.log` (your requests and the responses) and
+`webapp_events.jsonl` (ground truth for each request). Some categories (injection, access control,
 credential stuffing) show up in a single request. Others (misconfiguration,
 insecure design, logging failures) are weaknesses the app has rather than
 something a sensor sees, so what you can detect there is the exploitation

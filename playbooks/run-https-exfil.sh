@@ -47,3 +47,5 @@ say "C2 response: $RESP"
 
 step "Done — HTTPS-style exfil complete."
 say "artifacts: $LOG  (received copy under results/c2_exfil_received/ on the control-api side)"
+
+act_summary

@@ -29,6 +29,7 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Northline :: impair-cloud-logging emulation :: session=$SESSION"
 
 step "check current (decoy) logging state"
+st_mark T1562.008 "check-logging-state"
 st_http GET "http://${C2_HOST}:${C2_PORT}/logging/status" | tee -a "$LOG"
 echo "" | tee -a "$LOG"
 
@@ -48,3 +49,5 @@ step "Done — impair-logging emulation complete."
 say "note: /logging/disable only flips control-api's own in-memory flag; nothing"
 say "real was affected. Reset it by restarting the control-api container."
 say "artifacts: $LOG  (server-side log: results/control_api_beacons.log)"
+
+act_summary

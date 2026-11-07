@@ -16,6 +16,7 @@
 #   export + grep layers for leftover secrets   T1552.007
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
@@ -54,17 +55,25 @@ RUN echo "DECOY-SECRET-FILE-CONTENT-NOT-REAL-11111111" > /tmp/build-secret.txt \
 RUN rm -f /tmp/build-secret.txt
 RUN echo layer-without-network-access
 EOF
+st_mark T1613 "build-decoy-image"
+act "$ST_TECH" "docker build (decoy image with baked-in secrets)" docker-sandbox "$DOCKER_HOST"
 docker build -q -t "$IMAGE_TAG" "$BUILD_DIR" 2>&1 | tee -a "$LOG"
 
 step "discovery — enumerate local images (ATT&CK T1613)"
+st_mark T1613 "list-images"
+act "$ST_TECH" "docker images" docker-sandbox "$DOCKER_HOST"
 docker images 2>&1 | tee -a "$LOG"
 
 step "discovery — inspect image history for the ENV secret (ATT&CK T1552.007)"
+st_mark T1552.007 "image-history"
+act "$ST_TECH" "docker history --no-trunc" docker-sandbox "image $IMAGE_TAG"
 docker history --no-trunc "$IMAGE_TAG" 2>&1 | tee -a "$LOG"
 say "^ the ENV secret is visible directly in history — it never leaves image metadata."
 
 step "discovery — export layers and grep for the 'deleted' secret file (ATT&CK T1552.007)"
 EXPORT_TAR="${RESULTS_DIR}/image_export_${SESSION}.tar"
+st_mark T1552.007 "export-layers"
+act "$ST_TECH" "docker save -o + grep layers for secret" docker-sandbox "$EXPORT_TAR"
 docker save -o "$EXPORT_TAR" "$IMAGE_TAG" 2>&1 | tee -a "$LOG"
 # Modern `docker save` emits an OCI layout (blobs/sha256/<digest>, no file
 # extension); older Docker emits per-layer <id>/layer.tar. Handle both by
@@ -95,3 +104,5 @@ done
 step "Done — image/secret-discovery emulation complete."
 say "artifacts: $LOG  $EXPORT_TAR"
 say "cleanup: docker rmi $IMAGE_TAG   (runs against docker-sandbox, not any real registry/host)"
+
+act_summary

@@ -41,7 +41,7 @@ say "internal-host resolved to $TARGET_IP"
 
 step "network discovery — sweep internal host for open services (ATT&CK T1046)"
 st_mark T1046 "scan-internal-host"
-st_scan "$TARGET_IP" 22,80,443,2222 | tee -a "$LOG"
+st_scan "$INTERNAL_HOST" 22,80,443,2222 | tee -a "$LOG"
 
 step "remote services — SSH login using decoy credentials (ATT&CK T1021.004)"
 if ! command -v sshpass >/dev/null 2>&1; then
@@ -50,6 +50,7 @@ if ! command -v sshpass >/dev/null 2>&1; then
 fi
 st_mark T1021.004 "ssh-login"
 st_sshpass "$SSH_PASS"
+act T1021.004 "ssh -p $SSH_PORT ${SSH_USER}@${INTERNAL_HOST} \"id; hostname\"" "$INTERNAL_HOST" "${SSH_USER}@${INTERNAL_HOST}:${SSH_PORT}"
 RESULT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
     "${SSH_USER}@${TARGET_IP}" "id; hostname" 2>&1)"
 say "ssh login attempt result:"
@@ -57,3 +58,5 @@ echo "$RESULT" | tee -a "$LOG"
 
 step "Done — lateral-movement emulation complete."
 say "artifacts: $LOG"
+
+act_summary

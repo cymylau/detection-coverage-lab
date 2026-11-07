@@ -51,6 +51,7 @@ else
     WHAT="base + privileged overlay"
 fi
 ST="${STEALTH:-noisy}"
+RUN_START="$(date +%s)"
 
 echo "[run-everything] scenarios: $ONLY   stealth profile: $ST"
 echo "[run-everything] bringing up the environment ($WHAT)..."
@@ -90,6 +91,15 @@ echo "[run-everything] fixing ./results ownership -> $(id -u):$(id -g)..."
 for svc in ops-console dns-sink control-api web-portal; do
     $COMPOSE exec -T "$svc" chown -R "$(id -u):$(id -g)" /home/root/results || true
 done
+
+# Final activity report for THIS run: readable table + CSV (every row, every field).
+if [ -f results/activity.jsonl ] && command -v python3 >/dev/null 2>&1; then
+    python3 playbooks/activity-report.py results/activity.jsonl --since "$RUN_START" > results/activity_report.txt
+    python3 playbooks/activity-report.py results/activity.jsonl --since "$RUN_START" --format csv > results/activity.csv
+    cat results/activity_report.txt
+    echo
+    echo "[run-everything] activity report: results/activity_report.txt (table)  results/activity.csv (every row)"
+fi
 
 echo "[run-everything] done. Results are in ./results/"
 echo "[run-everything] tear down with: $COMPOSE down -v"

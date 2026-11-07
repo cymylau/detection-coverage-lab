@@ -17,6 +17,7 @@
 #   bash playbooks/run-persistence.sh --cleanup   # remove
 # ---------------------------------------------------------------------------
 set -u
+source "$(cd "$(dirname "$0")" && pwd)/lib-stealth.sh"
 
 source "$(cd "$(dirname "$0")" && pwd)/lib-guard.sh"
 require_lab_container
@@ -62,6 +63,7 @@ chmod +x "$DECOY_SCRIPT"
 log "wrote harmless decoy payload -> $DECOY_SCRIPT"
 
 step "cron persistence (ATT&CK T1053.003)"
+st_mark T1053.003 "cron"; act_here "crontab - (add */15 entry)" "crontab for $(id -un) -> $DECOY_SCRIPT"
 if command -v crontab >/dev/null 2>&1; then
     ( crontab -l 2>/dev/null; echo "*/15 * * * * $DECOY_SCRIPT $MARKER" ) | crontab -
     log "installed cron entry (runs every 15m, tagged for cleanup):"
@@ -71,6 +73,7 @@ else
 fi
 
 step "systemd user-unit persistence (ATT&CK T1543.002)"
+st_mark T1543.002 "systemd-unit"; act_here "write systemd user unit (not enabled)" "$UNIT_FILE"
 if command -v systemctl >/dev/null 2>&1; then
     mkdir -p "$UNIT_DIR"
     cat > "$UNIT_FILE" <<EOF
@@ -89,9 +92,12 @@ else
 fi
 
 step "shell-profile autostart persistence (ATT&CK T1546.004)"
+st_mark T1546.004 "bashrc"; act_here "append autostart line to .bashrc" "${HOME_DIR}/.bashrc"
 echo "${DECOY_SCRIPT} #${MARKER#\#}" >> "${HOME_DIR}/.bashrc"
 log "appended decoy autostart line to ${HOME_DIR}/.bashrc"
 
 step "Done — persistence emulation complete."
 log "artifacts: $LOG"
 log "remove everything with: bash playbooks/run-persistence.sh --cleanup"
+
+act_summary

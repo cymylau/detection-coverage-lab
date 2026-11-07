@@ -65,7 +65,7 @@ case "$ST_TIMING" in 0) BURST=30 ;; 1) BURST=15 ;; 2) BURST=8 ;; *) BURST=4 ;; e
 say "Northline :: OWASP Top 10:2025 emulation :: session=$SESSION target=${BASE}"
 say "$(st_banner) burst=${BURST}"
 
-if [ -z "$(st_http GET "${BASE}/health")" ]; then
+if [ -z "$(ACT_OFF=1 st_http GET "${BASE}/health")" ]; then
     say "!! web-portal not reachable at ${BASE} — is the web-portal service up?"
     exit 1
 fi
@@ -168,3 +168,5 @@ done
 
 step "Done — OWASP Top 10 emulation complete."
 say "artifacts: $LOG  (ground truth: results/webapp_events.jsonl, results/webapp_app.log)"
+
+act_summary

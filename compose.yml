@@ -22,6 +22,7 @@ services:
       # Playbooks that touch ~/.ssh, ~/.aws, ~/.bashrc, crontab etc. refuse to
       # run unless this is set (see playbooks/lib-guard.sh).
       - LAB_CONTAINER=1
+      - LAB_NODE=ops-console   # name shown as "Source" in the activity log
       # Stealth profile for the scenarios: noisy (default) | careful | quiet | covert.
       # See docs/REFERENCE.md "Stealth profiles". Set on the host, e.g. STEALTH=quiet docker compose up -d
       - STEALTH=${STEALTH:-noisy}

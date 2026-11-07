@@ -22,6 +22,7 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/lib-activity.sh"   # act_summary_all prints the combined activity table at the bottom
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/privileged_chain_${SESSION}.log"
@@ -61,3 +62,5 @@ bash "$HERE/run-impair-logging.sh" 2>&1 | tee -a "$LOG"
 
 say "########## PRIVILEGED CHAIN COMPLETE — session=$SESSION ##########"
 say "consolidated timeline: $LOG"
+
+act_summary_all

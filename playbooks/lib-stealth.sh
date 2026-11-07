@@ -19,6 +19,8 @@
 # ST_* settings below. Helpers: st_sleep, st_scan, st_http, st_sshpass, st_mark,
 # st_banner.
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-activity.sh"
+
 ST_VALID="noisy careful quiet covert"
 
 # name or number -> level 0-3, or non-zero status
@@ -93,9 +95,13 @@ st_sleep() {
 st_scan() {
     local host="$1" ports="$2" first="${2%%,*}" two
     case "$ST_TOOLING" in
-        0) nmap -Pn -n -p "$ports" --reason "$host" 2>&1 ;;
-        1) two="$(echo "$ports" | cut -d, -f1-2)"; nmap -Pn -n -T2 -p "$two" --reason "$host" 2>&1 ;;
-        2) if (exec 3<>"/dev/tcp/${host}/${first}") 2>/dev/null; then echo "probe ${host}:${first} open"
+        0) act "$ST_TECH" "nmap -Pn -n -p $ports --reason" "$host" "ports $ports"
+           nmap -Pn -n -p "$ports" --reason "$host" 2>&1 ;;
+        1) two="$(echo "$ports" | cut -d, -f1-2)"
+           act "$ST_TECH" "nmap -Pn -n -T2 -p $two --reason" "$host" "ports $two"
+           nmap -Pn -n -T2 -p "$two" --reason "$host" 2>&1 ;;
+        2) act "$ST_TECH" "bash /dev/tcp connect probe" "$host" "port $first"
+           if (exec 3<>"/dev/tcp/${host}/${first}") 2>/dev/null; then echo "probe ${host}:${first} open"
            else echo "probe ${host}:${first} closed"; fi ;;
         3) echo "(no scan at this level — connecting directly to ${host}:${first})" ;;
     esac
@@ -107,6 +113,12 @@ st_scan() {
 st_http() {
     local method="$1" url="$2" data="${3:-}" hdr="${4:-}" out="${5:-}"
     local to="${ST_HTTP_TIMEOUT:-5}"
+    local hp="${url#*://}" ; local hhost="${hp%%/*}" ; local hpath="/${hp#*/}"
+    [ "$hp" = "${hp#*/}" ] && hpath="/"
+    local tool="curl -s -X $method"; [ "$ST_TOOLING" -ge 2 ] && tool="python3 urllib $method"
+    local note=""
+    case "$data" in "") ;; @*) note=" --data-binary ${data}" ;; *) note=" -d ${data:0:40}" ;; esac
+    act "$ST_TECH" "${tool}${note}" "${hhost%%:*}" "$hpath"
     if [ "$ST_TOOLING" -le 1 ]; then
         local args=(-s --max-time "$to")
         [ -n "$ST_UA" ] && args+=(-A "$ST_UA")
@@ -155,6 +167,7 @@ st_sshpass() {
 # st_mark TECHNIQUE STEP — local timeline for lining EDR alerts up against what ran.
 # Never sent on the wire.
 st_mark() {
+    ST_TECH="$1"; ST_STEP="${2:-}"
     local f="${RESULTS_DIR:-/home/root/results}/stealth_timeline.jsonl"
     printf '{"ts":"%s","profile":"%s","timing":%s,"tooling":%s,"artifacts":%s,"technique":"%s","step":"%s"}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$STEALTH_NAME" "$ST_TIMING" "$ST_TOOLING" "$ST_ARTIFACTS" \

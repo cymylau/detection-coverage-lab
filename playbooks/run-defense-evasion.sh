@@ -37,6 +37,7 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Northline :: defense-evasion emulation :: session=$SESSION"
 
 step "process masquerading — benign binary under a suspicious name (ATT&CK T1036.003)"
+st_mark T1036.003 "masquerade"; act_here "cp sleep + execute under new name" "$MASQ_PATH"
 cp "$(command -v sleep)" "$MASQ_PATH" 2>/dev/null && say "copied 'sleep' -> $MASQ_PATH (looks like a renamed system process)"
 "$MASQ_PATH" 0.1 &
 MASQ_PID=$!
@@ -44,10 +45,10 @@ wait "$MASQ_PID" 2>/dev/null
 say "ran masqueraded binary as pid $MASQ_PID, name='$(basename "$MASQ_PATH")'"
 rm -f "$MASQ_PATH"
 
-st_mark T1036 "masquerade"
 if [ "$ST_ARTIFACTS" -ge 2 ]; then
     say "(artifacts level $ST_ARTIFACTS: skipping timestomp/history-clear — they are loud indicators)"
 else
+    st_mark T1070.006 "timestomp"; act_here "touch -d 2001-01-01" "${RESULTS_DIR}/evasion_decoy_${SESSION}.txt"
     step "timestomping — backdate a decoy file's timestamp (ATT&CK T1070.006)"
     DECOY_FILE="${RESULTS_DIR}/evasion_decoy_${SESSION}.txt"
     echo "decoy file for timestomp demonstration" > "$DECOY_FILE"
@@ -55,6 +56,7 @@ else
     touch -d "2001-01-01 00:00:00" "$DECOY_FILE"
     say "backdated mtime to 2001-01-01 -> $(date -r "$DECOY_FILE" 2>/dev/null || stat -c %y "$DECOY_FILE")"
 
+    st_mark T1070.003 "clear-history"; act_here "history -c; truncate .bash_history" "${HOME_DIR}/.bash_history"
     step "indicator removal — clear shell history (ATT&CK T1070.003)"
     history -c 2>/dev/null && say "cleared in-memory bash history" || say "(history -c not applicable in this shell)"
     : > "${HOME_DIR}/.bash_history" 2>/dev/null && say "truncated ~/.bash_history"
@@ -71,3 +73,5 @@ fi
 
 step "Done — defense-evasion emulation complete."
 say "artifacts: $LOG"
+
+act_summary

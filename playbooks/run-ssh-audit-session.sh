@@ -66,6 +66,14 @@ step "opening one SSH session and running the audit-worthy command sequence (ATT
 # before the script is sent over SSH.
 st_mark T1021.004 "ssh-audit-session"
 st_sshpass "$SSH_PASS"
+DST="$INTERNAL_HOST"; TGT="${SSH_USER}@${INTERNAL_HOST}:${SSH_PORT}"
+act T1021.004 "ssh -p $SSH_PORT ${SSH_USER}@${INTERNAL_HOST} bash -s (one audited session)" "$DST" "$TGT"
+act T1033 "whoami; id; uname -a (remote)" "$DST" "$TGT"
+act T1552.001 "cat /etc/sudoers (remote)" "$DST" "/etc/sudoers"
+act T1548.003 "sudo -l (remote)" "$DST" "sudo policy"
+act T1003.008 "sudo cat /etc/shadow (remote)" "$DST" "/etc/shadow"
+act T1552.001 "cat ~/.ssh/authorized_keys (remote)" "$DST" "~/.ssh/authorized_keys"
+act T1082 "who; last; env (remote)" "$DST" "session/environment"
 TRANSCRIPT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" \
     -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
     "${SSH_USER}@${TARGET_IP}" bash -s 2>&1 <<REMOTE_SESSION
@@ -96,3 +104,5 @@ say "if your EDR/auditd pipeline is capturing session audit logs, you"
 say "should see one SSH session on internal-host containing every"
 say "command above, including the sudoers/shadow reads and the sudo"
 say "elevation, not just the initial connection."
+
+act_summary

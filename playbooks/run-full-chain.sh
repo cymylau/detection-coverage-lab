@@ -27,6 +27,7 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/lib-activity.sh"   # act_summary_all prints the combined activity table at the bottom
 RESULTS_DIR="${RESULTS_DIR:-/home/root/results}"
 SESSION="$(date +%s)"
 LOG="${RESULTS_DIR}/full_chain_${SESSION}.log"
@@ -83,3 +84,5 @@ fi
 
 say "########## FULL CHAIN COMPLETE — session=$SESSION ##########"
 say "consolidated timeline: $LOG"
+
+act_summary_all

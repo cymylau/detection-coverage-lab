@@ -32,6 +32,7 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Northline :: cryptomining/resource-hijack emulation :: session=$SESSION duration=${DURATION}s"
 
 step "sustained high-CPU decoy load (ATT&CK T1496)"
+st_mark T1496 "cpu-load"; act_here "$(command -v openssl >/dev/null && echo "openssl speed sha256" || echo "busy loop") for ${DURATION}s" "sustained CPU"
 if command -v openssl >/dev/null 2>&1; then
     timeout "$DURATION" $ST_NICE openssl speed -seconds "$DURATION" sha256 >/dev/null 2>&1 &
 else
@@ -57,3 +58,5 @@ wait "$LOAD_PID" 2>/dev/null
 
 step "Done — cryptomining emulation complete."
 say "artifacts: $LOG  (server-side log: results/control_api_beacons.log)"
+
+act_summary
