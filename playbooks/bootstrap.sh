@@ -11,14 +11,17 @@
 set -eu
 
 METADATA_IP="${METADATA_IP:-169.254.169.254}"
-HERE="$(cd "$(dirname "$0")" && pwd)"
 SERVICES="${SERVICES_DIR:-/home/root/services}"
 
 # SKIP_INSTALL=1 once the network is locked down (no egress for apt).
 if [ "${SKIP_INSTALL:-0}" != "1" ]; then
     echo "[bootstrap] installing tools..."
-    apt-get update -qq
-    apt-get install -y --no-install-recommends \
+    apt-get -o Acquire::Retries=3 update -qq || {
+        echo "[bootstrap] !! apt-get update failed: the package mirrors are unreachable." >&2
+        echo "[bootstrap]    If an earlier run already locked the network down, start clean with:" >&2
+        echo "[bootstrap]    bash run-everything.sh --down   (then run again)" >&2
+        exit 1; }
+    apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
         nmap curl dnsutils iproute2 python3 coreutils ca-certificates >/dev/null
 
     # Versions are not pinned (Kali rolling drops old ones), so record what was

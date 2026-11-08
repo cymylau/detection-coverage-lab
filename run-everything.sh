@@ -25,6 +25,10 @@
 # "--only owasp" and "--only untrusted-fields" start only the base containers (no
 # privileged Docker-in-Docker). Everything else starts the privileged overlay too.
 #
+# At the end it prints a stage summary and writes results/last_run.json. Exit
+# status: 0 when every stage passed, non-zero if setup failed or any scenario
+# stage failed (the other stages still run and the results are still reported).
+#
 # For anything more targeted (one scenario at a time), see docs/REFERENCE.md.
 # ---------------------------------------------------------------------------
 set -eu
@@ -46,7 +50,7 @@ while [ $# -gt 0 ]; do
         --stealth=*) export STEALTH="${1#*=}"; shift ;;
         --only) [ $# -ge 2 ] || { echo "--only needs a value" >&2; exit 2; }; ONLY="$2"; shift 2 ;;
         --only=*) ONLY="${1#*=}"; shift ;;
-        -h|--help) sed -n 2,30p "$0"; exit 0 ;;
+        -h|--help) awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -158,16 +162,177 @@ fi
 ST="${STEALTH:-noisy}"
 RUN_START="$(date +%s)"
 
+# ---- stage bookkeeping ------------------------------------------------------
+# A failed scenario does not stop the run: each stage's exit code is recorded,
+# the results are still handed back and reported, and the exit status says what
+# happened. A setup failure (install, lock-down, readiness) stops before any
+# scenario runs. Either way finish() runs on exit, including on Ctrl-C.
+STAGES=()          # "exit<TAB>name"
+FAILED=0
+STARTED=0          # 1 once containers are being brought up
+STEP="preflight"   # what was happening, for the message if setup fails
+
+stage_run() {      # stage_run NAME CMD...
+    local name="$1" rc=0
+    shift
+    echo "[run-everything] running: $name"
+    "$@" || rc=$?
+    STAGES+=("${rc}"$'\t'"${name}")
+    if [ "$rc" -ne 0 ]; then
+        FAILED=$((FAILED + 1))
+        echo "[run-everything] !! $name exited $rc; carrying on with the rest"
+    fi
+    return 0
+}
+
+# Is SERVICE listening on PORT? Reads the container's own socket table, so the
+# check sends no traffic (nothing for your sensors to see before the scenarios).
+listening() {      # listening SERVICE tcp|udp PORT
+    local hex
+    printf -v hex '%04X' "$3"
+    $COMPOSE exec -T "$1" cat "/proc/net/$2" "/proc/net/${2}6" 2>/dev/null |
+        awk -v p=":$hex" -v proto="$2" 'substr($2, length($2) - 4) == p && (proto == "udp" || $4 == "0A") {f = 1} END {exit !f}'
+}
+
+wait_ready() {     # wait_ready SECONDS SERVICE:PROTO:PORT...
+    local limit="$1" deadline pending w svc proto port
+    shift
+    deadline=$(( $(date +%s) + limit ))
+    while :; do
+        pending=""
+        for w in "$@"; do
+            IFS=: read -r svc proto port <<< "$w"
+            listening "$svc" "$proto" "$port" || pending="$pending $svc:$port"
+        done
+        [ -z "$pending" ] && return 0
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "[run-everything] !! still not listening after ${limit}s:$pending" >&2
+            echo "[run-everything]    see why with:  $COMPOSE logs <service>" >&2
+            return 1
+        fi
+        sleep 2
+    done
+}
+
+write_last_run() { # results/last_run.json: what ran, when, and how each stage ended
+    python3 - "$RUN_START" "$(date +%s)" "$ONLY" "$ST" "$1" "$STEP" \
+        "${SEL_TECH[*]+${SEL_TECH[*]}}" "${SEL_TACTIC[*]+${SEL_TACTIC[*]}}" ${STAGES[@]+"${STAGES[@]}"} \
+        > results/last_run.json <<'PY'
+import json, sys
+start, end, only, profile, status, step, tech, tactic, *stages = sys.argv[1:]
+out = {"start": int(start), "end": int(end), "only": only, "stealth": profile, "status": status,
+       "stages": [{"name": s.split("\t", 1)[1], "exit": int(s.split("\t", 1)[0])} for s in stages]}
+if status == "setup-failed":
+    out["failed_during"] = step
+if tech or tactic:
+    out["selection"] = {"technique": tech.split(), "tactic": tactic.split()}
+json.dump(out, sys.stdout, indent=1)
+print()
+PY
+}
+
+finish() {
+    local rc=$? status r
+    trap - EXIT
+    set +e
+    [ "$STARTED" = 1 ] || exit "$rc"
+    echo
+    # Containers run as root, so everything they wrote to ./results is root-owned
+    # on the host. Hand it back to the invoking user.
+    echo "[run-everything] fixing ./results ownership -> $(id -u):$(id -g)..."
+    for svc in ops-console dns-sink control-api web-portal; do
+        $COMPOSE exec -T "$svc" chown -R "$(id -u):$(id -g)" /home/root/results >/dev/null 2>&1
+    done
+    [ -z "$(find results ! -user "$(id -u)" -print -quit 2>/dev/null)" ] || fix_results_ownership
+
+    # Confirm each action from the destination's side (their own logs), then write the
+    # final activity report for THIS run: readable table + CSV (every row, every field).
+    if [ -f results/activity.jsonl ]; then
+        $COMPOSE exec -T internal-host cat /config/logs/openssh/current > results/server_sshd.log 2>/dev/null
+        SRC=results/activity.jsonl
+        if python3 playbooks/observe.py --results results --since "$RUN_START"; then SRC=results/activity_confirmed.jsonl; fi
+        python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" > results/activity_report.txt
+        python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" --format csv > results/activity.csv
+        cat results/activity_report.txt
+        echo
+        echo "[run-everything] activity report: results/activity_report.txt (table)  results/activity.csv (every row)"
+    fi
+
+    if [ "$STEP" != scenarios ] && [ "$STEP" != finished ]; then status=setup-failed
+    elif [ "$FAILED" -gt 0 ] || [ "$rc" -ne 0 ]; then status=failed
+    else status=ok; fi
+    write_last_run "$status"
+
+    if [ ${#STAGES[@]} -gt 0 ]; then
+        echo
+        echo "[run-everything] stage summary"
+        for r in "${STAGES[@]}"; do
+            if [ "${r%%$'\t'*}" = 0 ]; then echo "  ok      ${r#*$'\t'}"
+            else echo "  FAILED  ${r#*$'\t'} (exit ${r%%$'\t'*})"; fi
+        done
+        # name the failed scenarios inside this run's chains, so nobody has to scroll for them
+        if [ "$FAILED" -gt 0 ]; then
+            find results -maxdepth 1 \( -name 'full_chain_*.log' -o -name 'privileged_chain_*.log' \) \
+                -newermt "@$RUN_START" 2>/dev/null | sort | while IFS= read -r f; do
+                grep -h '^  FAILED  ' "$f" | sed "s|^  FAILED  |            failed inside: |; s|\$|   [$f]|"
+            done
+        fi
+    fi
+    echo
+    case "$status" in
+        ok)
+            echo "[run-everything] done. Results are in ./results/"
+            echo "[run-everything] tear down with: bash run-everything.sh --down"
+            exit 0 ;;
+        setup-failed)
+            echo "[run-everything] STOPPED during setup ($STEP, exit $rc); no scenarios ran after that point."
+            echo "[run-everything] fix the error above, then: bash run-everything.sh --down  and run again" ;;
+        *)
+            if [ "$FAILED" -gt 0 ]; then
+                echo "[run-everything] FINISHED WITH FAILURES: $FAILED of ${#STAGES[@]} stage(s) failed (see the summary above;"
+                echo "[run-everything] each chain's own log in ./results/ has a per-scenario summary at its end)."
+            else
+                echo "[run-everything] INTERRUPTED (exit $rc) while running scenarios."
+            fi
+            echo "[run-everything] results so far are in ./results/ ; tear down with: bash run-everything.sh --down" ;;
+    esac
+    [ "$rc" -ne 0 ] && exit "$rc"
+    exit 1
+}
+trap finish EXIT
+
 echo "[run-everything] scenarios: $ONLY   stealth profile: $ST"
+# Stealth timing adds deliberate waits. Rough real-time totals, measured from
+# the action counts each profile performs (see docs/REFERENCE.md#stealth-profiles).
+case "${STEALTH_TIMING:-$ST}" in
+    careful|1) EST="about 5 minutes for everything (about 2 for --only mitre, 3 for --only owasp)" ;;
+    quiet|2)   EST="about 15 minutes for everything (about 9 for --only mitre, 5 for --only owasp)" ;;
+    covert|3)  EST="about 40 minutes for everything (about 30 for --only mitre, 10 for --only owasp)" ;;
+    *)         EST="" ;;
+esac
+if [ -n "$EST" ]; then
+    if [ "${STEALTH_TIME_SCALE:-1}" = 1 ]; then
+        echo "[run-everything] this timing profile waits on purpose: expect $EST."
+        echo "[run-everything] (STEALTH_TIME_SCALE=0.1 shrinks every wait, at the cost of realism)"
+    else
+        echo "[run-everything] timing profile with STEALTH_TIME_SCALE=${STEALTH_TIME_SCALE}: unscaled it would be $EST."
+    fi
+fi
+
+STARTED=1; STEP="bringing up containers"
 echo "[run-everything] bringing up the environment ($WHAT)..."
 $COMPOSE up -d
 
+STEP="waiting for ops-console"
 echo "[run-everything] waiting for containers to be ready..."
-for i in $(seq 1 15); do
-    $COMPOSE exec ops-console sh -c 'true' >/dev/null 2>&1 && break
+ok=0
+for _ in $(seq 1 30); do
+    if $COMPOSE exec -T ops-console true >/dev/null 2>&1; then ok=1; break; fi
     sleep 1
 done
+[ "$ok" = 1 ] || { echo "[run-everything] !! ops-console did not start within 30s; see: $COMPOSE logs ops-console" >&2; exit 1; }
 
+STEP="installing tooling"
 echo "[run-everything] setup phase (needs egress): install tooling..."
 $COMPOSE exec ops-console bash playbooks/bootstrap.sh
 if [ "$ONLY" != owasp ]; then
@@ -177,56 +342,41 @@ if [ "$ONLY" != owasp ] && [ "$ONLY" != untrusted-fields ] && { [ "$ONLY" != sel
     $COMPOSE exec ops-console bash playbooks/install-container-tools.sh
 fi
 
+STEP="locking down the network"
 echo "[run-everything] locking down network (removing setup-net egress)..."
-COMPOSE="$COMPOSE" bash lock-down-network.sh
+bash lock-down-network.sh
 
+STEP="waiting for the lab services"
+echo "[run-everything] waiting for every service to listen..."
+wait_ready 60 dns-sink:udp:53 control-api:tcp:8443 web-portal:tcp:8080 internal-host:tcp:2222 ops-console:tcp:80
+echo "[run-everything] all services ready"
+
+STEP=scenarios
 if [ "$ONLY" = owasp ]; then
-    echo "[run-everything] OWASP Top 10:2025 scenarios..."
-    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-owasp-top10.sh
+    stage_run "OWASP Top 10:2025 scenarios (run-owasp-top10.sh)" \
+        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-owasp-top10.sh
 elif [ "$ONLY" = select ]; then
     echo "[run-everything] selected scenarios:"
     printf '%s\n' "$PLAN" | sed 's/ ;; .*//; s/^/    /'
-    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/seed-decoys.sh
+    stage_run "seed decoys (seed-decoys.sh)" $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/seed-decoys.sh </dev/null
     while IFS= read -r line; do
         spec="${line%% ;; *}"; flags="${line#* ;; }"
-        echo "[run-everything] running: $spec"
-        # shellcheck disable=SC2086  (spec is "script.sh [args]", intentionally word-split)
+        # spec is "script.sh [args]", intentionally word-split.
         # -T and </dev/null: otherwise exec reads (and swallows) the rest of $PLAN from the loop's stdin
-        $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/$spec </dev/null
+        # shellcheck disable=SC2086
+        stage_run "$spec" $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/$spec </dev/null
         case "$flags" in *persistence=1*)
-            [ "${KEEP_PERSISTENCE:-0}" = 1 ] || $COMPOSE exec -T ops-console bash playbooks/run-persistence.sh --cleanup </dev/null ;; esac
+            [ "${KEEP_PERSISTENCE:-0}" = 1 ] || stage_run "persistence cleanup (run-persistence.sh --cleanup)" \
+                $COMPOSE exec -T ops-console bash playbooks/run-persistence.sh --cleanup </dev/null ;; esac
     done <<< "$PLAN"
 elif [ "$ONLY" = untrusted-fields ]; then
-    echo "[run-everything] untrusted-field handling scenario..."
-    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-untrusted-fields.sh
+    stage_run "untrusted-field handling (run-untrusted-fields.sh)" \
+        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-untrusted-fields.sh
 else
     SKIP_OWASP=0; [ "$ONLY" = mitre ] && SKIP_OWASP=1
-    echo "[run-everything] base scenarios..."
-    $COMPOSE exec -e SKIP_SETUP=1 -e SKIP_OWASP="$SKIP_OWASP" -e STEALTH="$ST" ops-console bash playbooks/run-all.sh
-
-    echo "[run-everything] privileged/overlay scenarios..."
-    $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-privileged-chain.sh
+    stage_run "base scenarios (run-all.sh -> run-full-chain.sh)" \
+        $COMPOSE exec -e SKIP_SETUP=1 -e SKIP_OWASP="$SKIP_OWASP" -e STEALTH="$ST" ops-console bash playbooks/run-all.sh
+    stage_run "privileged/overlay scenarios (run-privileged-chain.sh)" \
+        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-privileged-chain.sh
 fi
-
-# Containers run as root, so everything they wrote to ./results is root-owned
-# on the host. Hand it back to the invoking user.
-echo "[run-everything] fixing ./results ownership -> $(id -u):$(id -g)..."
-for svc in ops-console dns-sink control-api web-portal; do
-    $COMPOSE exec -T "$svc" chown -R "$(id -u):$(id -g)" /home/root/results || true
-done
-
-# Confirm each action from the destination's side (their own logs), then write the
-# final activity report for THIS run: readable table + CSV (every row, every field).
-if [ -f results/activity.jsonl ] && command -v python3 >/dev/null 2>&1; then
-    $COMPOSE exec -T internal-host cat /config/logs/openssh/current > results/server_sshd.log 2>/dev/null || true
-    SRC=results/activity.jsonl
-    if python3 playbooks/observe.py --results results --since "$RUN_START"; then SRC=results/activity_confirmed.jsonl; fi
-    python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" > results/activity_report.txt
-    python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" --format csv > results/activity.csv
-    cat results/activity_report.txt
-    echo
-    echo "[run-everything] activity report: results/activity_report.txt (table)  results/activity.csv (every row)"
-fi
-
-echo "[run-everything] done. Results are in ./results/"
-echo "[run-everything] tear down with: $COMPOSE down -v"
+STEP=finished

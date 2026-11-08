@@ -2,13 +2,18 @@
 """
 Score your EDR/CDR/WAF against what the lab actually did.
 
-  detection-report.py --alerts EXPORT [--activity results/activity.jsonl] [--since EPOCH]
-                      [--window SECONDS] [--csv FILE] [--layer FILE]
+  detection-report.py --alerts EXPORT [--activity results/activity.jsonl] [--since EPOCH | --all-runs]
+                      [--window SECONDS] [--time-offset HOURS] [--csv FILE] [--layer FILE]
 
 Reads the activity log (every action the lab performed, with a UTC time and a
 technique ID) and an alert export from your tool (CSV, JSON, or JSON lines),
 then reports for every technique whether it was detected, partly detected or
 missed.
+
+Which run: activity.jsonl accumulates across runs. By default only the latest
+run-everything.sh run is scored (its start time is read from last_run.json next
+to the activity log); --since EPOCH picks another start, --all-runs scores
+everything.
 
 An alert counts for an action when its time falls from 2 seconds before the
 action to --window seconds after it (default 120), and then:
@@ -23,7 +28,8 @@ Alert fields are found by name, case-insensitively:
              (ISO 8601 with or without zone, or epoch seconds/milliseconds)
   technique  technique, techniques, mitre, mitre_technique, attack_id, tags, ...
              any text in the alert containing T1234 / T1234.567 / OWASP-A05 / A05:2025
-Times without a zone are taken as UTC.
+Times without a zone are taken as UTC; if your export is in local time, give
+--time-offset HOURS (for example 1 for UTC+1, -5 for UTC-5).
 
 --layer writes an ATT&CK Navigator layer (green detected, amber partial, red
 missed) that you can load at https://mitre-attack.github.io/attack-navigator/
@@ -36,8 +42,13 @@ TIME_KEYS = ["time", "timestamp", "ts", "_time", "created_at", "detected_at", "f
 ID_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b|OWASP-A\d{2}|\bA(\d{2}):20\d\d\b", re.I)
 
 
-def parse_time(v):
-    if v is None or v == "":
+ISO_RE = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d")
+
+
+def parse_time(v, offset_h=0.0):
+    """epoch seconds/ms or ISO 8601 -> epoch seconds. offset_h applies only to
+    ISO times with no zone (local-time exports)."""
+    if v is None or v == "" or isinstance(v, bool):
         return None
     if isinstance(v, (int, float)) or re.fullmatch(r"\d+(\.\d+)?", str(v).strip()):
         x = float(v)
@@ -47,9 +58,11 @@ def parse_time(v):
     for cand in (s, s.replace(" ", "T", 1)):
         try:
             d = datetime.fromisoformat(cand)
-            return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).timestamp()
         except ValueError:
-            pass
+            continue
+        if d.tzinfo:
+            return d.timestamp()
+        return d.replace(tzinfo=timezone.utc).timestamp() - offset_h * 3600
     return None
 
 
@@ -63,7 +76,8 @@ def ids_in(text):
     return out
 
 
-def load_alerts(path):
+def load_alerts(path, offset_h=0.0):
+    """-> (alerts, rows_without_a_time, field_names_seen)"""
     raw = open(path, errors="replace").read()
     rows = []
     stripped = raw.lstrip()
@@ -87,22 +101,35 @@ def load_alerts(path):
                     pass
     else:
         rows = list(csv.DictReader(raw.splitlines()))
-    alerts = []
+    alerts, no_time, fields = [], 0, set()
     for r in rows:
         low = {str(k).lower(): v for k, v in r.items()}
+        fields.update(low)
         t = None
         for k in TIME_KEYS:
             if k in low:
-                t = parse_time(low[k])
+                t = parse_time(low[k], offset_h)
                 if t: break
-        if t is None:
-            for v in low.values():
-                t = parse_time(v) if isinstance(v, (str, int, float)) else None
-                if t and t > 1e9: break
         if not t:
+            # fall back to any ISO-looking date string (never a bare number: that is
+            # far more likely to be an alert or event ID than a time)
+            for v in low.values():
+                if isinstance(v, str) and ISO_RE.match(v.strip()):
+                    t = parse_time(v, offset_h)
+                    if t: break
+        if not t:
+            no_time += 1
             continue
         alerts.append({"t": t, "ids": ids_in(json.dumps(r, default=str)), "raw": r})
-    return alerts
+    return alerts, no_time, sorted(fields)
+
+
+def utc(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def warn(msg):
+    print("warning: " + msg, file=sys.stderr)
 
 
 def matches(action_tech, alert_ids):
@@ -115,11 +142,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--alerts", required=True)
     ap.add_argument("--activity", default="results/activity.jsonl")
-    ap.add_argument("--since", type=float, default=0)
+    ap.add_argument("--since", type=float, help="score actions from this epoch time (default: the latest run)")
+    ap.add_argument("--all-runs", action="store_true", help="score every run in the activity log")
     ap.add_argument("--window", type=float, default=120)
+    ap.add_argument("--time-offset", type=float, default=0.0, metavar="HOURS",
+                    help="UTC offset of zone-less alert times, e.g. 1 for UTC+1 (default 0 = UTC)")
     ap.add_argument("--csv")
     ap.add_argument("--layer")
     a = ap.parse_args()
+
+    since = a.since
+    if since is None and not a.all_runs:
+        lr = os.path.join(os.path.dirname(a.activity) or ".", "last_run.json")
+        try:
+            since = float(json.load(open(lr))["start"])
+            print(f"scoring the latest run (started {utc(since)}, from {lr}); --all-runs scores every run")
+        except (OSError, ValueError, KeyError, TypeError):
+            since = 0
+    since = since or 0
 
     acts = []
     for line in open(a.activity):
@@ -127,11 +167,22 @@ def main():
             r = json.loads(line)
         except ValueError:
             continue
-        if float(r.get("epoch", 0)) >= a.since:
+        if float(r.get("epoch", 0)) >= since:
             acts.append(r)
-    alerts = load_alerts(a.alerts)
+    alerts, no_time, fields = load_alerts(a.alerts, a.time_offset)
     if not acts:
-        print("no actions in", a.activity); return 1
+        print("no actions in", a.activity, f"since {utc(since)}" if since else ""); return 1
+    if no_time:
+        warn(f"{no_time} alert row(s) had no recognisable time and were ignored. Fields seen: "
+             + ", ".join(fields[:15]) + (" ..." if len(fields) > 15 else ""))
+    if not alerts:
+        warn(f"no alerts with a usable time were read from {a.alerts}: every action will show as missed")
+    else:
+        lo, hi = min(float(r["epoch"]) for r in acts), max(float(r["epoch"]) for r in acts)
+        if not any(lo - 2 <= al["t"] <= hi + a.window for al in alerts):
+            warn(f"none of the {len(alerts)} alerts fall inside the run ({utc(lo)} to {utc(hi)}); alerts span "
+                 f"{utc(min(al['t'] for al in alerts))} to {utc(max(al['t'] for al in alerts))}. "
+                 "Check the export's time range, or --time-offset if its times are local.")
     names = {}
     try:
         for l in open(os.path.join(HERE, "techniques.tsv")):

@@ -33,7 +33,7 @@ st_level_of() {
         *) return 1 ;;
     esac
 }
-st_name_of() { local lvl="$1"; local names=($ST_VALID); echo "${names[$lvl]}"; }
+st_name_of() { local lvl="$1"; local names; read -ra names <<< "$ST_VALID"; echo "${names[$lvl]}"; }
 
 _st_resolve() {
     local base dim var val lvl
@@ -60,7 +60,7 @@ TIME_SCALE="${STEALTH_TIME_SCALE:-1}"
 
 # ---- profile table (one place to tune) -------------------------------------
 # index = level: noisy careful quiet covert
-_pick() { local a=($1); echo "${a[$2]}"; }
+_pick() { local a; read -ra a <<< "$1"; echo "${a[$2]}"; }
 # timing: C2 beacon jitter, mining poll interval, DNS inter-query delay (seconds)
 ST_JITTER_MIN="$(_pick '1 5 30 120' "$ST_TIMING")"
 ST_JITTER_MAX="$(_pick '4 15 90 300' "$ST_TIMING")"
@@ -72,7 +72,8 @@ ST_DNS_DELAY_MAX="$(_pick '0 2 5 15' "$ST_TIMING")"
 ST_DNS_LABEL="$(_pick '48 32 24 12' "$ST_TOOLING")"
 ST_UA=""   # empty = client default
 [ "$ST_TOOLING" -ge 1 ] && ST_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-ST_NICE=""; [ "$ST_TIMING" -ge 2 ] && ST_NICE="nice -n 19"
+# shellcheck disable=SC2034  # used by run-cryptomining.sh
+if [ "$ST_TIMING" -ge 2 ]; then ST_NICE="nice -n 19"; else ST_NICE=""; fi
 export STEALTH_NAME ST_TIMING ST_TOOLING ST_ARTIFACTS ST_JITTER_MIN ST_JITTER_MAX \
        ST_POLL_MIN ST_POLL_MAX ST_DNS_DELAY_MIN ST_DNS_DELAY_MAX ST_DNS_LABEL ST_UA
 
@@ -160,6 +161,7 @@ st_sshpass() {
     if [ "$ST_TOOLING" -ge 1 ]; then
         export SSHPASS="$1"; ST_SSHPASS=(sshpass -e)
     else
+        # shellcheck disable=SC2034  # used by the ssh scenarios via "${ST_SSHPASS[@]}"
         ST_SSHPASS=(sshpass -p "$1")
     fi
 }
@@ -167,7 +169,9 @@ st_sshpass() {
 # st_mark TECHNIQUE STEP — local timeline for lining EDR alerts up against what ran.
 # Never sent on the wire.
 st_mark() {
-    ST_TECH="$1"; ST_STEP="${2:-}"
+    # shellcheck disable=SC2034  # ST_STEP is read by act() in lib-activity.sh
+    ST_STEP="${2:-}"
+    ST_TECH="$1"
     local f="${RESULTS_DIR:-/home/root/results}/stealth_timeline.jsonl"
     printf '{"ts":"%s","profile":"%s","timing":%s,"tooling":%s,"artifacts":%s,"technique":"%s","step":"%s"}\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$STEALTH_NAME" "$ST_TIMING" "$ST_TOOLING" "$ST_ARTIFACTS" \

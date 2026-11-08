@@ -12,6 +12,9 @@
 # cloud/container batch" entrypoint, parallel to run-full-chain.sh for
 # the base scenarios.
 #
+# A failing stage does not stop the chain; a stage summary is printed at the
+# end and the script exits non-zero if any stage failed.
+#
 # Requires the privileged overlay to be up and tooling installed:
 #   docker compose -f compose.yml -f compose.privileged.yml up -d
 #   docker compose -f compose.yml -f compose.privileged.yml exec ops-console \
@@ -30,6 +33,7 @@ LOG="${RESULTS_DIR}/privileged_chain_${SESSION}.log"
 mkdir -p "$RESULTS_DIR"
 say() { echo -e "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 stage() { echo "" | tee -a "$LOG"; say "########## STAGE: $* ##########"; }
+source "$HERE/lib-chain.sh"      # chain_stage / chain_end: run each stage, report failures at the end
 
 say "Cymylau :: privileged/cloud-native chain :: session=$SESSION"
 
@@ -39,28 +43,22 @@ if [ -z "${DOCKER_HOST:-}" ]; then
     exit 1
 fi
 
-stage "0/7 seed decoy artifacts (incl. K8s service-account token)"
-bash "$HERE/seed-decoys.sh" 2>&1 | tee -a "$LOG"
+chain_stage "0/7 seed decoy artifacts (incl. K8s service-account token)" bash "$HERE/seed-decoys.sh"
 
-stage "1/7 Docker-socket escape"
-bash "$HERE/run-docker-socket-escape.sh" 2>&1 | tee -a "$LOG"
+chain_stage "1/7 Docker-socket escape" bash "$HERE/run-docker-socket-escape.sh"
 
-stage "2/7 privileged-container capability abuse"
-bash "$HERE/run-privileged-container-abuse.sh" 2>&1 | tee -a "$LOG"
+chain_stage "2/7 privileged-container capability abuse" bash "$HERE/run-privileged-container-abuse.sh"
 
-stage "3/7 cryptomining / resource hijacking"
-bash "$HERE/run-cryptomining.sh" 2>&1 | tee -a "$LOG"
+chain_stage "3/7 cryptomining / resource hijacking" bash "$HERE/run-cryptomining.sh"
 
-stage "4/7 image/secret discovery"
-bash "$HERE/run-image-secret-discovery.sh" 2>&1 | tee -a "$LOG"
+chain_stage "4/7 image/secret discovery" bash "$HERE/run-image-secret-discovery.sh"
 
-stage "5/7 workload-identity theft"
-bash "$HERE/run-workload-identity-theft.sh" 2>&1 | tee -a "$LOG"
+chain_stage "5/7 workload-identity theft" bash "$HERE/run-workload-identity-theft.sh"
 
-stage "6/7 impair cloud logging"
-bash "$HERE/run-impair-logging.sh" 2>&1 | tee -a "$LOG"
+chain_stage "6/7 impair cloud logging" bash "$HERE/run-impair-logging.sh"
 
 say "########## PRIVILEGED CHAIN COMPLETE — session=$SESSION ##########"
 say "consolidated timeline: $LOG"
 
 act_summary_all
+chain_end

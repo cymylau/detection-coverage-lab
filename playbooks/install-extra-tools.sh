@@ -11,8 +11,12 @@
 set -eu
 
 echo "[install-extra-tools] installing additional packages..."
-apt-get update -qq
-apt-get install -y --no-install-recommends \
+apt-get -o Acquire::Retries=3 update -qq || {
+    echo "[install-extra-tools] !! apt-get update failed: the package mirrors are unreachable." >&2
+    echo "[install-extra-tools]    If an earlier run already locked the network down, start clean with:" >&2
+    echo "[install-extra-tools]    bash run-everything.sh --down   (then run again)" >&2
+    exit 1; }
+apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
     zip unzip sqlite3 sshpass openssh-client netcat-traditional >/dev/null
 
 # Versions are not pinned (Kali rolling drops old ones), so record what was

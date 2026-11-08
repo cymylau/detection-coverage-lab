@@ -11,7 +11,8 @@ Checks:
   2. every recorded ID has a name in playbooks/techniques.tsv;
   3. the README lists all ten OWASP Top 10:2025 categories and the untrusted-field IDs
      the scenario really uses;
-  4. the technique count stated in the README matches the table;
+  4. the technique count stated in the README matches the table, and every option in the
+     run-everything.sh usage header is mentioned in the README or docs/REFERENCE.md;
   5. every local link and #anchor in README.md, SECURITY.md and docs/*.md resolves;
   6. every doc says Cymylau Ltd is a fictitious company.
 """
@@ -68,6 +69,18 @@ for u in ufld_script:
 m = re.search(r"\((\d+) techniques below\)", readme)
 if m and int(m.group(1)) != len(in_readme):
     bad(f"README says {m.group(1)} techniques but the table has {len(in_readme)}")
+
+
+# 4b. every run-everything.sh option in its usage header (what --help prints) is documented
+header = ""
+for line in open("run-everything.sh").readlines()[1:]:   # the leading comment block, as --help prints it
+    if not line.startswith("#"):
+        break
+    header += line
+docs_text = readme + open("docs/REFERENCE.md").read()
+for flag in sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", header))):
+    if not re.search(re.escape(flag) + r"(?![\w-])", docs_text):
+        bad(f"run-everything.sh option {flag} is not mentioned in README.md or docs/REFERENCE.md")
 
 
 # 5. local links and anchors
