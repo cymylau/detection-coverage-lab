@@ -168,7 +168,7 @@ recorded the same way and printed as a table at the end of the chain's log.
 covers:
 - shell syntax and Python compile;
 - compose validation;
-- ShellCheck at error level (warnings are shown but do not fail);
+- ShellCheck at warning level (intentional exceptions are marked inline with `# shellcheck disable=` and a reason);
 - `tests/test_tools.py`, unit tests for the reporting, scoring, confirmation
   and selection tools (`python3 -m unittest discover -s tests`, no Docker
   needed);

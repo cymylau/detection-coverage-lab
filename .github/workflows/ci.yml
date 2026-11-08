@@ -27,12 +27,9 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Docs match the code
         run: python3 tests/check-docs.py
-      - name: ShellCheck (errors block)
-        run: shellcheck -S error run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh
-      - name: ShellCheck (warnings, informational)
-        # The remaining warnings are mostly variables used by the scripts that
-        # source lib-stealth.sh; shown for review, not blocking.
-        continue-on-error: true
+      - name: ShellCheck
+        # Warning level, blocking. Intentional exceptions carry an inline
+        # "# shellcheck disable=..." comment saying why.
         run: shellcheck -S warning run-everything.sh lock-down-network.sh playbooks/*.sh services/*.sh
 
   smoke:

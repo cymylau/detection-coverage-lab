@@ -11,7 +11,6 @@
 set -eu
 
 METADATA_IP="${METADATA_IP:-169.254.169.254}"
-HERE="$(cd "$(dirname "$0")" && pwd)"
 SERVICES="${SERVICES_DIR:-/home/root/services}"
 
 # SKIP_INSTALL=1 once the network is locked down (no egress for apt).
