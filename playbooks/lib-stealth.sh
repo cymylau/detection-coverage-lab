@@ -96,17 +96,17 @@ st_sleep() {
 st_scan() {
     local host="$1" ports="$2" first="${2%%,*}" two
     case "$ST_TOOLING" in
-        0) act "$ST_TECH" "nmap -Pn -n -p $ports --reason" "$host" "ports $ports"
-           nmap -Pn -n -p "$ports" --reason "$host" 2>&1 ;;
-        1) two="$(echo "$ports" | cut -d, -f1-2)"
-           act "$ST_TECH" "nmap -Pn -n -T2 -p $two --reason" "$host" "ports $two"
-           nmap -Pn -n -T2 -p "$two" --reason "$host" 2>&1 ;;
-        2) act "$ST_TECH" "bash /dev/tcp connect probe" "$host" "port $first"
-           if (exec 3<>"/dev/tcp/${host}/${first}") 2>/dev/null; then echo "probe ${host}:${first} open"
+        0) ax "$ST_TECH" "$host" "ports $ports" -- nmap -Pn -n -p "$ports" --reason "$host" 2>&1 ;;
+        1) two="${ports#*,}"; two="${ports%%,*}${two:+,${two%%,*}}"
+           ax "$ST_TECH" "$host" "ports $two" -- nmap -Pn -n -T2 -p "$two" --reason "$host" 2>&1 ;;
+        2) if ax --ok any --label "bash /dev/tcp connect probe" "$ST_TECH" "$host" "port $first" -- \
+                _st_tcp_probe "$host" "$first"; then echo "probe ${host}:${first} open"
            else echo "probe ${host}:${first} closed"; fi ;;
         3) echo "(no scan at this level — connecting directly to ${host}:${first})" ;;
     esac
 }
+
+_st_tcp_probe() { (exec 3<>"/dev/tcp/${1}/${2}") 2>/dev/null; }
 
 # st_http METHOD URL [DATA|@FILE] [HEADER] [OUTFILE]
 # curl at tooling 0-1; python3 urllib at 2-3 (no curl process, fewer tool names).
@@ -116,10 +116,8 @@ st_http() {
     local to="${ST_HTTP_TIMEOUT:-5}"
     local hp="${url#*://}" ; local hhost="${hp%%/*}" ; local hpath="/${hp#*/}"
     [ "$hp" = "${hp#*/}" ] && hpath="/"
-    local tool="curl -s -X $method"; [ "$ST_TOOLING" -ge 2 ] && tool="python3 urllib $method"
-    local note=""
-    case "$data" in "") ;; @*) note=" --data-binary ${data}" ;; *) note=" -d ${data:0:40}" ;; esac
-    act "$ST_TECH" "${tool}${note}" "${hhost%%:*}" "$hpath"
+    local dst="${hhost%%:*}" ok="--ok 0"
+    [ -n "${ST_HTTP_OK:-}" ] && ok="--ok $ST_HTTP_OK"
     if [ "$ST_TOOLING" -le 1 ]; then
         local args=(-s --max-time "$to")
         [ -n "$ST_UA" ] && args+=(-A "$ST_UA")
@@ -129,26 +127,32 @@ st_http() {
         fi
         [ -n "$hdr" ] && args+=(-H "$hdr")
         [ -n "$out" ] && args+=(-o "$out")
-        curl "${args[@]}" "$url"
+        case "$url" in https://*) args+=(-k) ;; esac   # the lab's TLS endpoint is self-signed
+        # shellcheck disable=SC2086  # $ok is two words on purpose
+        ax $ok "$ST_TECH" "$dst" "$hpath" -- curl "${args[@]}" "$url"
     else
-        python3 - "$method" "$url" "$data" "$hdr" "$out" "$to" "$ST_UA" <<'PY'
+        # shellcheck disable=SC2086
+        ax $ok --label "python3 urllib $method $url" "$ST_TECH" "$dst" "$hpath" -- python3 - "$method" "$url" "$data" "$hdr" "$out" "$to" "$ST_UA" <<'PY'
 import sys, urllib.request, urllib.error
 method, url, data, hdr, out, to, ua = sys.argv[1:8]
 body = None
 if data:
     body = open(data[1:], "rb").read() if data.startswith("@") else data.encode()
+import ssl
+ctx = ssl._create_unverified_context()   # the lab's TLS endpoint is self-signed
 req = urllib.request.Request(url, data=body, method=method)
 if ua: req.add_header("User-Agent", ua)
 if hdr:
     k, _, v = hdr.partition(":"); req.add_header(k.strip(), v.strip())
 try:
-    resp = urllib.request.urlopen(req, timeout=float(to)).read()
+    resp = urllib.request.urlopen(req, timeout=float(to), context=ctx).read()
 except urllib.error.HTTPError as e:
     resp = e.read()   # keep 4xx/5xx bodies, like curl does
 except Exception:
-    resp = b""
-if out: open(out, "wb").write(resp)
-else: sys.stdout.buffer.write(resp)
+    resp = None   # no connection / timeout: fail like curl does
+if out and resp is not None: open(out, "wb").write(resp)
+elif resp is not None: sys.stdout.buffer.write(resp)
+sys.exit(7 if resp is None else 0)
 PY
     fi
 }
@@ -167,8 +171,20 @@ st_sshpass() {
 }
 
 # st_mark TECHNIQUE STEP — local timeline for lining EDR alerts up against what ran.
-# Never sent on the wire.
+# Never sent on the wire. With ACT_GAP=SECONDS (run-everything.sh --gap), waits that
+# long whenever the technique changes, so alerts for different techniques do not
+# land in the same time window or get grouped into one incident.
 st_mark() {
+    if [ "${ACT_GAP:-0}" != 0 ]; then
+        # the last technique is kept in a file so the gap also applies between scenario scripts
+        local lf="${RESULTS_DIR:-/home/root/results}/.act_last_tech" last=""
+        [ -f "$lf" ] && read -r last < "$lf"
+        if [ -n "$last" ] && [ "$last" != "$1" ]; then
+            echo "[gap] ${ACT_GAP}s before ${1} (technique changed)" >&2
+            sleep "$ACT_GAP"
+        fi
+        printf '%s\n' "$1" > "$lf" 2>/dev/null || true
+    fi
     # shellcheck disable=SC2034  # ST_STEP is read by act() in lib-activity.sh
     ST_STEP="${2:-}"
     ST_TECH="$1"

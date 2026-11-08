@@ -38,27 +38,25 @@ if [ ! -d "$DECOY_DIR/documents" ]; then
 fi
 
 step "collection — find sensitive-looking decoy documents (ATT&CK T1119)"
-mapfile -t FOUND < <(find "$DECOY_DIR" -type f \( -iname '*record*' -o -iname '*.txt' \) 2>/dev/null)
+st_mark T1119 "find-documents"
+mapfile -t FOUND < <(ax_here "$DECOY_DIR" -- find "$DECOY_DIR" -type f \( -iname '*record*' -o -iname '*.txt' \) 2>/dev/null)
 say "found ${#FOUND[@]} candidate files:"
 printf '  %s\n' "${FOUND[@]}" | tee -a "$LOG"
 
 st_mark T1119 "collect-and-stage"
-act_here "find + cp decoy documents to staging" "$DECOY_DIR -> $STAGE_DIR"
 mkdir -p "$STAGE_DIR"
-cp "${FOUND[@]}" "$STAGE_DIR/" 2>/dev/null
+ax_here "$DECOY_DIR -> $STAGE_DIR" -- cp "${FOUND[@]}" "$STAGE_DIR/" 2>/dev/null
 say "copied candidates into staging dir -> $STAGE_DIR"
 
 step "archive — tar.gz the staged files (ATT&CK T1560.001)"
 TARBALL="${RESULTS_DIR}/staged_${SESSION}.tar.gz"
-act T1560.001 "tar -czf" "$LAB_NODE" "$TARBALL"
-tar -czf "$TARBALL" -C "$(dirname "$STAGE_DIR")" "$(basename "$STAGE_DIR")" 2>&1 | tee -a "$LOG"
+ax T1560.001 "$LAB_NODE" "$TARBALL" -- tar -czf "$TARBALL" -C "$(dirname "$STAGE_DIR")" "$(basename "$STAGE_DIR")" 2>&1 | tee -a "$LOG"
 say "created archive -> $TARBALL ($(wc -c < "$TARBALL" 2>/dev/null || echo 0) bytes)"
 
 step "archive — also zip, if available, for tooling diversity (ATT&CK T1560.001)"
 if command -v zip >/dev/null 2>&1; then
     ZIPFILE="${RESULTS_DIR}/staged_${SESSION}.zip"
-    act T1560.001 "zip -qr" "$LAB_NODE" "$ZIPFILE"
-    (cd "$(dirname "$STAGE_DIR")" && zip -qr "$ZIPFILE" "$(basename "$STAGE_DIR")") 2>&1 | tee -a "$LOG"
+    (cd "$(dirname "$STAGE_DIR")" && ax T1560.001 "$LAB_NODE" "$ZIPFILE" -- zip -qr "$ZIPFILE" "$(basename "$STAGE_DIR")") 2>&1 | tee -a "$LOG"
     say "created archive -> $ZIPFILE"
 else
     say "(zip not installed — tar.gz only; install zip in bootstrap.sh to exercise both)"
@@ -66,10 +64,9 @@ fi
 
 # artifacts >=2: tidy the staging copy (the archive remains for the exfil step)
 if [ "$ST_ARTIFACTS" -ge 2 ]; then
-    act T1070.004 "rm -rf staging dir" "$LAB_NODE" "$STAGE_DIR"
-    rm -rf -- "$STAGE_DIR"
-    say "removed staging directory $STAGE_DIR (indicator removal, T1070.004)"
     st_mark T1070.004 "remove-staging-dir"
+    ax T1070.004 "$LAB_NODE" "$STAGE_DIR" -- rm -rf -- "$STAGE_DIR"
+    say "removed staging directory $STAGE_DIR (indicator removal, T1070.004)"
 fi
 
 step "Done — collection & staging emulation complete."

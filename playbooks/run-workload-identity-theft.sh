@@ -35,9 +35,10 @@ if [ ! -f "${SA_DIR}/token" ]; then
     say "!! no decoy token found — run: bash playbooks/seed-decoys.sh first"
     exit 1
 fi
-find /var/run/secrets -type f 2>/dev/null | tee -a "$LOG"
-st_mark T1552.007 "read-token"; act_here "cat service-account token" "${SA_DIR}/token"
-TOKEN="$(cat "${SA_DIR}/token")"
+st_mark T1552.007 "find-token"
+ax_here --ok 0,1 /var/run/secrets -- find /var/run/secrets -type f 2>/dev/null | tee -a "$LOG"
+st_mark T1552.007 "read-token"
+TOKEN="$(ax_here "${SA_DIR}/token" -- cat "${SA_DIR}/token")"
 NAMESPACE="$(cat "${SA_DIR}/namespace" 2>/dev/null || echo unknown)"
 say "discovered token for namespace='${NAMESPACE}' (${#TOKEN} chars)"
 

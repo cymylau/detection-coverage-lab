@@ -70,26 +70,27 @@ carrier_ua() {   # value
 carrier_ssh() {  # value  (a failed login: the username is the carrier)
     st_sshpass "DECOY-wrong-password"
     local out result
-    out="$("${ST_SSHPASS[@]}" ssh -l "$1" -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+    # sshpass exits 5 for a rejected password: the username reached sshd's
+    # authentication and was logged, which is what this carrier needs
+    out="$(ax --ok 5 UFLD-02 "$INTERNAL_HOST" "$1" -- "${ST_SSHPASS[@]}" ssh -l "$1" -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
         -o PreferredAuthentications=password -o PubkeyAuthentication=no "$INTERNAL_HOST" true 2>&1)"
     # "Permission denied" = the username reached sshd's authentication and was logged.
     # Anything else (e.g. connection closed) = sshd dropped it before logging, see SSH_PENALTY_WAIT.
     case "$out" in *"Permission denied"*) result="reached sshd authentication" ;; *) result="NOT logged by sshd: ${out:0:60}" ;; esac
-    act UFLD-02 "ssh -l <username> -p ${SSH_PORT} ${INTERNAL_HOST} (failed login)" "$INTERNAL_HOST" "$1" "$result"
     say "    ssh: $result"
 }
 carrier_proc() { # value  (argv[0] of a renamed binary)
     local bin="${WORK}/.cache-sync-helper"
     cp "$(command -v sleep)" "$bin"
-    act UFLD-03 "exec -a <value> ${bin} 0.3 (renamed sleep)" "$LAB_NODE" "argv0: $1"
-    bash -c 'exec -a "$1" "$0" 0.3' "$bin" "$1"
+    # argv[0] is the carrier here, so no lab marker on it
+    ax --no-marker --label "exec -a <value> ${bin} 0.3 (renamed sleep)" UFLD-03 "$LAB_NODE" "argv0: $1" -- \
+        bash -c 'exec -a "$1" "$0" 0.3' "$bin" "$1"
 }
 carrier_file() { # value  (archive file name)
     local out="${WORK}/backup ${1}.tar.gz"
     mkdir -p "${DECOY_DIR}/documents"
     [ -z "$(ls -A "${DECOY_DIR}/documents" 2>/dev/null)" ] && bash "$(dirname "$0")/seed-decoys.sh" >/dev/null 2>&1
-    act UFLD-04 "tar -czf <file name> decoy documents" "$LAB_NODE" "$out"
-    tar -czf "$out" -C "$DECOY_DIR" documents 2>/dev/null
+    ax UFLD-04 "$LAB_NODE" "$out" -- tar -czf "$out" -C "$DECOY_DIR" documents 2>/dev/null
 }
 
 CONTROL=( "Mozilla/5.0 (X11; Linux x86_64)" "decoyuser" "cache-sync-helper" "nightly" )

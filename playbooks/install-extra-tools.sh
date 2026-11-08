@@ -17,7 +17,8 @@ apt-get -o Acquire::Retries=3 update -qq || {
     echo "[install-extra-tools]    bash run-everything.sh --down   (then run again)" >&2
     exit 1; }
 apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
-    zip unzip sqlite3 sshpass openssh-client netcat-traditional >/dev/null
+    zip unzip sqlite3 sshpass openssh-client netcat-traditional sudo cron >/dev/null
+# sudo: host-recon's sudo -l (T1069.001); cron: persistence's crontab entry (T1053.003)
 
 # Versions are not pinned (Kali rolling drops old ones), so record what was
 # actually installed to make a run reproducible/auditable after the fact.

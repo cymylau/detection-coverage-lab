@@ -54,6 +54,9 @@ jobs:
           not_seen = [r for r in rows if r.get("observed") == "NO"]
           assert rows, "empty activity log"
           assert not not_seen, f"{len(not_seen)} action(s) never reached their destination"
+          # every action was run (and recorded) by ax: real argv, exit status, a marker
+          assert all(r.get("kind") == "exec" and "argv" in r and "rc" in r for r in rows), "an action was not recorded by ax"
+          assert all(r["marker"].startswith("cdl-") for r in rows), "an OWASP request has no marker"
           print(f"{len(rows)} actions, all OWASP categories exercised, every remote action confirmed")
           PY
           test -s results/activity_report.txt
@@ -68,7 +71,10 @@ jobs:
           import json
           r = json.load(open("results/last_run.json"))
           assert r["status"] == "ok" and r["stages"], r
+          assert r["action_check"] == "ok" and r["markers"], r
           rows = [json.loads(l) for l in open("results/activity_confirmed.jsonl")]
+          assert not [x for x in rows if x.get("observed") == "FAILED"], "an action failed"
+          assert {x["run"] for x in rows} == {r["run"]}, "records from another run id"
           techs = {x["technique"] for x in rows}
           assert "T1552.005" in techs, techs
           assert not [x for x in rows if x.get("observed") == "NO"], "an action never reached its destination"

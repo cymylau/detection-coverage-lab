@@ -32,11 +32,14 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Cymylau :: cryptomining/resource-hijack emulation :: session=$SESSION duration=${DURATION}s"
 
 step "sustained high-CPU decoy load (ATT&CK T1496)"
-st_mark T1496 "cpu-load"; act_here "$(command -v openssl >/dev/null && echo "openssl speed sha256" || echo "busy loop") for ${DURATION}s" "sustained CPU"
+st_mark T1496 "cpu-load"
+_busy_loop() { local end=$((SECONDS + $1)); while [ $SECONDS -lt $end ]; do :; done; }
 if command -v openssl >/dev/null 2>&1; then
-    timeout "$DURATION" $ST_NICE openssl speed -seconds "$DURATION" sha256 >/dev/null 2>&1 &
+    # timeout exits 124 when it stops the load at the deadline: that is the plan
+    # shellcheck disable=SC2086  # $ST_NICE is empty or "nice -n 19"
+    ax_here --ok 0,124 "sustained CPU" -- timeout "$DURATION" $ST_NICE openssl speed -seconds "$DURATION" sha256 >/dev/null 2>&1 &
 else
-    ( END=$((SECONDS + DURATION)); while [ $SECONDS -lt $END ]; do :; done ) &
+    ax_here --label "busy loop for ${DURATION}s" "sustained CPU" -- _busy_loop "$DURATION" &
 fi
 LOAD_PID=$!
 say "decoy CPU-bound process running as pid $LOAD_PID for ${DURATION}s"

@@ -11,6 +11,8 @@
 #   bash run-everything.sh --only owasp       # OWASP Top 10:2025 scenarios only
 #   bash run-everything.sh --only untrusted-fields   # untrusted telemetry-field handling (opt-in, not part of the default run)
 #   bash run-everything.sh --stealth quiet    # quieter attacker: noisy|careful|quiet|covert
+#   bash run-everything.sh --gap 180          # wait 180 s whenever the technique changes
+#   bash run-everything.sh --no-markers       # run commands without the per-action marker
 #
 #   bash run-everything.sh --technique T1552.005    # just the scenario(s) that perform a technique
 #   bash run-everything.sh --tactic credential-access
@@ -25,9 +27,15 @@
 # "--only owasp" and "--only untrusted-fields" start only the base containers (no
 # privileged Docker-in-Docker). Everything else starts the privileged overlay too.
 #
-# At the end it prints a stage summary and writes results/last_run.json. Exit
-# status: 0 when every stage passed, non-zero if setup failed or any scenario
-# stage failed (the other stages still run and the results are still reported).
+# Every command a scenario runs is recorded as it runs (argv, exit status, times)
+# and carries a marker, cdl-<run>-<n>, on its argv[0], so detection-report.py can
+# tie an alert to the exact action. --no-markers runs the commands unmodified.
+#
+# At the end it prints a stage summary, checks every action and the run against
+# playbooks/scenarios.json, and writes results/last_run.json. Exit status: 0 when
+# every stage passed and every action ran as expected; non-zero if setup failed,
+# a scenario stage failed, or an action failed (the other stages still run and
+# the results are still reported).
 #
 # For anything more targeted (one scenario at a time), see docs/REFERENCE.md.
 # ---------------------------------------------------------------------------
@@ -35,6 +43,7 @@ set -eu
 
 SEL_TECH=(); SEL_TACTIC=(); DO_LIST=0
 ONLY=all; DO_CHECK=0; DO_DOWN=0; DO_RESET=0; ASSUME_YES=0
+ACT_MARKERS=1; ACT_GAP=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --technique) [ $# -ge 2 ] || { echo "--technique needs a value" >&2; exit 2; }; SEL_TECH+=("$2"); shift 2 ;;
@@ -42,6 +51,9 @@ while [ $# -gt 0 ]; do
         --tactic) [ $# -ge 2 ] || { echo "--tactic needs a value" >&2; exit 2; }; SEL_TACTIC+=("$2"); shift 2 ;;
         --tactic=*) SEL_TACTIC+=("${1#*=}"); shift ;;
         --list) DO_LIST=1; shift ;;
+        --no-markers) ACT_MARKERS=0; shift ;;
+        --gap) [ $# -ge 2 ] || { echo "--gap needs a number of seconds" >&2; exit 2; }; ACT_GAP="$2"; shift 2 ;;
+        --gap=*) ACT_GAP="${1#*=}"; shift ;;
         --check) DO_CHECK=1; shift ;;
         --down) DO_DOWN=1; shift ;;
         --reset) DO_RESET=1; shift ;;
@@ -56,6 +68,7 @@ while [ $# -gt 0 ]; do
 done
 case "${STEALTH:-noisy}" in noisy|careful|quiet|covert|0|1|2|3) ;; *)
     echo "invalid STEALTH='${STEALTH}' — valid: noisy careful quiet covert" >&2; exit 2 ;; esac
+case "$ACT_GAP" in ''|*[!0-9]*) echo "invalid --gap '$ACT_GAP' — give whole seconds, e.g. --gap 180" >&2; exit 2 ;; esac
 case "$ONLY" in all|mitre|owasp|untrusted-fields) ;; *)
     echo "invalid --only '$ONLY' — valid: all mitre owasp untrusted-fields" >&2; exit 2 ;; esac
 
@@ -151,6 +164,7 @@ echo
 
 # Create results/ as the invoking user (otherwise Docker creates it as root).
 mkdir -p results
+rm -f results/.act_last_tech 2>/dev/null || true   # --gap bookkeeping from an earlier run
 
 if [ "$ONLY" = owasp ] || [ "$ONLY" = untrusted-fields ] || { [ "$ONLY" = select ] && [ "$NEED_OVERLAY" = 0 ]; }; then
     COMPOSE="docker compose -f compose.yml"
@@ -161,6 +175,13 @@ else
 fi
 ST="${STEALTH:-noisy}"
 RUN_START="$(date +%s)"
+printf -v CDL_RUN '%04x' "$RANDOM"   # the <run> part of every marker in this run
+# settings every scenario exec gets (the stealth overrides only when you set them)
+XE=(-e STEALTH="$ST" -e CDL_RUN="$CDL_RUN" -e ACT_MARKERS="$ACT_MARKERS" -e ACT_GAP="$ACT_GAP")
+for v in STEALTH_TIMING STEALTH_TOOLING STEALTH_ARTIFACTS STEALTH_TIME_SCALE KEEP_PERSISTENCE; do
+    if [ -n "${!v:-}" ]; then XE+=(-e "$v=${!v}"); fi
+done
+ACTION_CHECK=not-run
 
 # ---- stage bookkeeping ------------------------------------------------------
 # A failed scenario does not stop the run: each stage's exit code is recorded,
@@ -215,12 +236,13 @@ wait_ready() {     # wait_ready SECONDS SERVICE:PROTO:PORT...
 }
 
 write_last_run() { # results/last_run.json: what ran, when, and how each stage ended
-    python3 - "$RUN_START" "$(date +%s)" "$ONLY" "$ST" "$1" "$STEP" \
+    python3 - "$RUN_START" "$(date +%s)" "$ONLY" "$ST" "$1" "$STEP" "$CDL_RUN" "$ACT_MARKERS" "$ACT_GAP" "$ACTION_CHECK" \
         "${SEL_TECH[*]+${SEL_TECH[*]}}" "${SEL_TACTIC[*]+${SEL_TACTIC[*]}}" ${STAGES[@]+"${STAGES[@]}"} \
         > results/last_run.json <<'PY'
 import json, sys
-start, end, only, profile, status, step, tech, tactic, *stages = sys.argv[1:]
-out = {"start": int(start), "end": int(end), "only": only, "stealth": profile, "status": status,
+start, end, only, profile, status, step, run, markers, gap, check, tech, tactic, *stages = sys.argv[1:]
+out = {"start": int(start), "end": int(end), "run": run, "markers": markers == "1", "gap": int(gap),
+       "only": only, "stealth": profile, "status": status, "action_check": check,
        "stages": [{"name": s.split("\t", 1)[1], "exit": int(s.split("\t", 1)[0])} for s in stages]}
 if status == "setup-failed":
     out["failed_during"] = step
@@ -250,7 +272,11 @@ finish() {
     if [ -f results/activity.jsonl ]; then
         $COMPOSE exec -T internal-host cat /config/logs/openssh/current > results/server_sshd.log 2>/dev/null
         SRC=results/activity.jsonl
-        if python3 playbooks/observe.py --results results --since "$RUN_START"; then SRC=results/activity_confirmed.jsonl; fi
+        # observe.py: confirm each action at its destination, and check the run
+        # against scenarios.json (exit 1 = a failed action or a manifest mismatch)
+        if python3 playbooks/observe.py --results results --since "$RUN_START"; then ACTION_CHECK=ok
+        else ACTION_CHECK=failed; fi
+        [ -s results/activity_confirmed.jsonl ] && SRC=results/activity_confirmed.jsonl
         python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" > results/activity_report.txt
         python3 playbooks/activity-report.py "$SRC" --since "$RUN_START" --format csv > results/activity.csv
         cat results/activity_report.txt
@@ -259,7 +285,7 @@ finish() {
     fi
 
     if [ "$STEP" != scenarios ] && [ "$STEP" != finished ]; then status=setup-failed
-    elif [ "$FAILED" -gt 0 ] || [ "$rc" -ne 0 ]; then status=failed
+    elif [ "$FAILED" -gt 0 ] || [ "$rc" -ne 0 ] || [ "$ACTION_CHECK" = failed ]; then status=failed
     else status=ok; fi
     write_last_run "$status"
 
@@ -291,6 +317,10 @@ finish() {
             if [ "$FAILED" -gt 0 ]; then
                 echo "[run-everything] FINISHED WITH FAILURES: $FAILED of ${#STAGES[@]} stage(s) failed (see the summary above;"
                 echo "[run-everything] each chain's own log in ./results/ has a per-scenario summary at its end)."
+            elif [ "$ACTION_CHECK" = failed ]; then
+                echo "[run-everything] FINISHED WITH FAILURES: every stage exited 0, but the run check found failed"
+                echo "[run-everything] actions or a scenarios.json mismatch (listed under 'run check' above; details in"
+                echo "[run-everything] results/run_check.json)."
             else
                 echo "[run-everything] INTERRUPTED (exit $rc) while running scenarios."
             fi
@@ -301,7 +331,7 @@ finish() {
 }
 trap finish EXIT
 
-echo "[run-everything] scenarios: $ONLY   stealth profile: $ST"
+echo "[run-everything] scenarios: $ONLY   stealth profile: $ST   run id: $CDL_RUN   markers: $([ "$ACT_MARKERS" = 1 ] && echo on || echo off)$([ "$ACT_GAP" -gt 0 ] && echo "   gap: ${ACT_GAP}s per technique change")"
 # Stealth timing adds deliberate waits. Rough real-time totals, measured from
 # the action counts each profile performs (see docs/REFERENCE.md#stealth-profiles).
 case "${STEALTH_TIMING:-$ST}" in
@@ -348,35 +378,35 @@ bash lock-down-network.sh
 
 STEP="waiting for the lab services"
 echo "[run-everything] waiting for every service to listen..."
-wait_ready 60 dns-sink:udp:53 control-api:tcp:8443 web-portal:tcp:8080 internal-host:tcp:2222 ops-console:tcp:80
+wait_ready 60 dns-sink:udp:53 control-api:tcp:8443 control-api:tcp:443 web-portal:tcp:8080 internal-host:tcp:2222 ops-console:tcp:80
 echo "[run-everything] all services ready"
 
 STEP=scenarios
 if [ "$ONLY" = owasp ]; then
     stage_run "OWASP Top 10:2025 scenarios (run-owasp-top10.sh)" \
-        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-owasp-top10.sh
+        $COMPOSE exec "${XE[@]}" ops-console bash playbooks/run-owasp-top10.sh
 elif [ "$ONLY" = select ]; then
     echo "[run-everything] selected scenarios:"
     printf '%s\n' "$PLAN" | sed 's/ ;; .*//; s/^/    /'
-    stage_run "seed decoys (seed-decoys.sh)" $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/seed-decoys.sh </dev/null
+    stage_run "seed decoys (seed-decoys.sh)" $COMPOSE exec -T "${XE[@]}" ops-console bash playbooks/seed-decoys.sh </dev/null
     while IFS= read -r line; do
         spec="${line%% ;; *}"; flags="${line#* ;; }"
         # spec is "script.sh [args]", intentionally word-split.
         # -T and </dev/null: otherwise exec reads (and swallows) the rest of $PLAN from the loop's stdin
         # shellcheck disable=SC2086
-        stage_run "$spec" $COMPOSE exec -T -e STEALTH="$ST" ops-console bash playbooks/$spec </dev/null
+        stage_run "$spec" $COMPOSE exec -T "${XE[@]}" ops-console bash playbooks/$spec </dev/null
         case "$flags" in *persistence=1*)
             [ "${KEEP_PERSISTENCE:-0}" = 1 ] || stage_run "persistence cleanup (run-persistence.sh --cleanup)" \
-                $COMPOSE exec -T ops-console bash playbooks/run-persistence.sh --cleanup </dev/null ;; esac
+                $COMPOSE exec -T "${XE[@]}" ops-console bash playbooks/run-persistence.sh --cleanup </dev/null ;; esac
     done <<< "$PLAN"
 elif [ "$ONLY" = untrusted-fields ]; then
     stage_run "untrusted-field handling (run-untrusted-fields.sh)" \
-        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-untrusted-fields.sh
+        $COMPOSE exec "${XE[@]}" ops-console bash playbooks/run-untrusted-fields.sh
 else
     SKIP_OWASP=0; [ "$ONLY" = mitre ] && SKIP_OWASP=1
     stage_run "base scenarios (run-all.sh -> run-full-chain.sh)" \
-        $COMPOSE exec -e SKIP_SETUP=1 -e SKIP_OWASP="$SKIP_OWASP" -e STEALTH="$ST" ops-console bash playbooks/run-all.sh
+        $COMPOSE exec -e SKIP_SETUP=1 -e SKIP_OWASP="$SKIP_OWASP" "${XE[@]}" ops-console bash playbooks/run-all.sh
     stage_run "privileged/overlay scenarios (run-privileged-chain.sh)" \
-        $COMPOSE exec -e STEALTH="$ST" ops-console bash playbooks/run-privileged-chain.sh
+        $COMPOSE exec "${XE[@]}" ops-console bash playbooks/run-privileged-chain.sh
 fi
 STEP=finished

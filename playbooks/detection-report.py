@@ -15,13 +15,29 @@ run-everything.sh run is scored (its start time is read from last_run.json next
 to the activity log); --since EPOCH picks another start, --all-runs scores
 everything.
 
-An alert counts for an action when its time falls from 2 seconds before the
-action to --window seconds after it (default 120), and then:
-  detected   the alert names the same technique (a parent ID such as T1552
-             matches the sub-technique T1552.005), or
-  partial    an alert fired in the window but names no technique or a different
-             one, so it may be unrelated or only a generic hit.
-  missed     no alert in the window.
+How an alert is tied to an action, strongest first:
+
+  marker     Every command the lab runs carries a marker, cdl-<run>-<n>, on its
+             argv[0] (and SSH sessions carry it in the remote command line). An
+             alert whose text contains an action's marker was caused by that
+             action: no time window, no reliance on technique tags. Export the
+             command-line field (process command line, parent command line) for
+             this to work. The marker of an SSH session also covers the commands
+             run inside it; those match when the alert also names their technique.
+  tag+time   No marker in any alert for the action: an alert that names the
+             action's exact technique and falls from 2 s before the action to
+             --window seconds after it (default 120). Alerts that carry a marker
+             are already attributed and are not reused here.
+
+Each action is then:
+  detected   tied by marker (and the alert names this technique or none), or by
+             tag+time with the exact technique ID;
+  partial    tied by marker but the tool named a different technique; or only an
+             alert naming the parent technique (T1552 for T1552.005), or an
+             alert naming nothing or something else, in the time window;
+  missed     nothing;
+  not-run    the action did not run as expected (observe.py marked it FAILED, or
+             its exit status was unexpected), so it is not scored.
 
 Alert fields are found by name, case-insensitively:
   time       time, timestamp, ts, _time, created_at, detected_at, first_seen, event_time
@@ -42,6 +58,7 @@ TIME_KEYS = ["time", "timestamp", "ts", "_time", "created_at", "detected_at", "f
 ID_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b|OWASP-A\d{2}|\bA(\d{2}):20\d\d\b", re.I)
 
 
+MARK_RE = re.compile(r"cdl-[0-9a-z]{4}-\d{5,}")
 ISO_RE = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d")
 
 
@@ -120,7 +137,8 @@ def load_alerts(path, offset_h=0.0):
         if not t:
             no_time += 1
             continue
-        alerts.append({"t": t, "ids": ids_in(json.dumps(r, default=str)), "raw": r})
+        text = json.dumps(r, default=str)
+        alerts.append({"t": t, "ids": ids_in(text), "marks": set(MARK_RE.findall(text)), "raw": r})
     return alerts, no_time, sorted(fields)
 
 
@@ -132,10 +150,37 @@ def warn(msg):
     print("warning: " + msg, file=sys.stderr)
 
 
-def matches(action_tech, alert_ids):
-    if action_tech in alert_ids:
-        return True
-    return any("." in action_tech and action_tech.split(".")[0] == i for i in alert_ids)  # parent ID
+def parent_match(action_tech, alert_ids):
+    return "." in action_tech and action_tech.split(".")[0] in alert_ids
+
+
+def score_action(r, alerts, window):
+    """-> (status, how, alert_count) for one action. See the module docstring."""
+    if r.get("kind") == "exec" and r.get("ok") is False or r.get("observed") == "FAILED":
+        return "not-run", f"exited {r.get('rc')}", 0
+    tech = r["technique"]
+    own = r.get("marker") if r.get("kind") == "exec" else r.get("parent")
+    if own:
+        hits = [al for al in alerts if own in al["marks"]]
+        if r.get("kind") == "declared":
+            hits = [al for al in hits if tech in al["ids"]]   # a session's marker: the tag says which step
+            if hits:
+                return "detected", "marker+tag", len(hits)
+        elif hits:
+            if any(not al["ids"] or tech in al["ids"] or parent_match(tech, al["ids"]) for al in hits):
+                return "detected", "marker", len(hits)
+            return "partial", "marker; tool named " + ",".join(sorted(set().union(*(al["ids"] for al in hits)))), len(hits)
+    t0 = float(r["epoch"])
+    win = [al for al in alerts if not al["marks"] and t0 - 2 <= al["t"] <= t0 + window]
+    exact = [al for al in win if tech in al["ids"]]
+    if exact:
+        return "detected", "tag+time", len(exact)
+    par = [al for al in win if parent_match(tech, al["ids"])]
+    if par:
+        return "partial", "parent tag+time", len(par)
+    if win:
+        return "partial", "other alert in window", len(win)
+    return "missed", "", 0
 
 
 def main():
@@ -191,20 +236,24 @@ def main():
     except OSError:
         pass
 
+    # only markers from these actions count (an old run's marker is not this run's)
+    known = {r.get("marker") for r in acts if r.get("marker")} | {r.get("parent") for r in acts if r.get("parent")}
+    known.discard(None)
+    for al in alerts:
+        al["marks"] &= known
+    marked = [al for al in alerts if al["marks"]]
+    if known and alerts and not marked:
+        warn("no alert carries a marker from this run (cdl-...), so every match below is by technique tag and time. "
+             "Include the process command line (and parent command line) in the export for exact attribution.")
+
     per_action = []
     for r in acts:
-        t0 = float(r["epoch"]); tech = r["technique"]
-        win = [al for al in alerts if t0 - 2 <= al["t"] <= t0 + a.window]
-        if any(matches(tech, al["ids"]) for al in win):
-            status = "detected"
-        elif win:
-            status = "partial"
-        else:
-            status = "missed"
-        per_action.append((r, status))
+        per_action.append((r,) + score_action(r, alerts, a.window))
 
     by = {}
-    for r, st in per_action:
+    for r, st, how, n in per_action:
+        if st == "not-run":
+            continue
         d = by.setdefault(r["technique"], {"detected": 0, "partial": 0, "missed": 0})
         d[st] += 1
 
@@ -214,6 +263,19 @@ def main():
         return "missed"
 
     print(f"\n=== Detection report — {len(acts)} action(s), {len(alerts)} alert(s), window {a.window:.0f}s ===")
+    hows = {}
+    for _, st, how, _ in per_action:
+        if st != "not-run" and how:
+            k = how.split(";")[0]; hows[k] = hows.get(k, 0) + 1
+    in_window = {id(al) for r, *_ in per_action for al in alerts
+                 if not al["marks"] and float(r["epoch"]) - 2 <= al["t"] <= float(r["epoch"]) + a.window}
+    print(f"alerts: {len(marked)} carry a marker from this run, {len(in_window)} unmarked ones fall in an action's "
+          f"time window, {len(alerts) - len(marked) - len(in_window)} are unrelated to this run")
+    print("actions matched by: " + (", ".join(f"{k} {v}" for k, v in sorted(hows.items())) or "nothing") +
+          ("" if known else "   (markers were off for this run: tag+time only)"))
+    notrun = sum(1 for _, st, _, _ in per_action if st == "not-run")
+    if notrun:
+        print(f"{notrun} action(s) did not run as expected and are not scored (see results/run_check.json)")
     head = ("Technique", "Name", "Actions", "Detected", "Partial", "Missed", "Result")
     rows = []
     for k, d in sorted(by.items()):
@@ -225,14 +287,17 @@ def main():
     res = [overall(d) for d in by.values()]
     n = len(res)
     print(f"\n{res.count('detected')}/{n} techniques detected, {res.count('partial')} partial, {res.count('missed')} missed.")
-    print("'partial' = an alert fired in the time window but did not name the technique; confirm it by hand.")
+    print("'partial' = the tool named a different or only the parent technique, or an untagged alert fired in the")
+    print("time window; confirm it by hand. Matches by marker are exact; tag+time matches can be coincidence.")
 
     if a.csv:
         with open(a.csv, "w", newline="") as fh:
             wr = csv.writer(fh)
-            wr.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "status"])
-            for r, st in per_action:
-                wr.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], st])
+            wr.writerow(["time_utc", "technique", "command", "source", "destination", "path_or_id", "kind", "marker",
+                         "status", "matched_by", "alerts"])
+            for r, st, how, n in per_action:
+                wr.writerow([r["ts"], r["technique"], r["command"], r["src"], r["dst"], r["path"], r.get("kind", ""),
+                             r.get("marker") or r.get("parent") or "", st, how, n])
         print("per-action detail:", a.csv)
     if a.layer:
         col = {"detected": "#31a354", "partial": "#fdae6b", "missed": "#de2d26"}

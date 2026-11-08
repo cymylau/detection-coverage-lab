@@ -63,9 +63,9 @@ chmod +x "$DECOY_SCRIPT"
 log "wrote harmless decoy payload -> $DECOY_SCRIPT"
 
 step "cron persistence (ATT&CK T1053.003)"
-st_mark T1053.003 "cron"; act_here "crontab - (add */15 entry)" "crontab for $(id -un) -> $DECOY_SCRIPT"
+st_mark T1053.003 "cron"
 if command -v crontab >/dev/null 2>&1; then
-    ( crontab -l 2>/dev/null; echo "*/15 * * * * $DECOY_SCRIPT $MARKER" ) | crontab -
+    ( crontab -l 2>/dev/null; echo "*/15 * * * * $DECOY_SCRIPT $MARKER" ) | ax_here "crontab for $(id -un) -> $DECOY_SCRIPT" -- crontab -
     log "installed cron entry (runs every 15m, tagged for cleanup):"
     crontab -l 2>&1 | tee -a "$LOG"
 else
@@ -73,10 +73,9 @@ else
 fi
 
 step "systemd user-unit persistence (ATT&CK T1543.002)"
-st_mark T1543.002 "systemd-unit"; act_here "write systemd user unit (not enabled)" "$UNIT_FILE"
-if command -v systemctl >/dev/null 2>&1; then
-    mkdir -p "$UNIT_DIR"
-    cat > "$UNIT_FILE" <<EOF
+st_mark T1543.002 "systemd-unit"
+mkdir -p "$UNIT_DIR"
+ax_here "$UNIT_FILE" -- tee "$UNIT_FILE" >/dev/null <<EOF
 [Unit]
 Description=Cymylau decoy persistence unit $MARKER
 
@@ -86,14 +85,11 @@ ExecStart=$DECOY_SCRIPT
 [Install]
 WantedBy=default.target
 EOF
-    log "wrote systemd user unit -> $UNIT_FILE (not enabled — file creation is the detection signal)"
-else
-    log "(systemctl not available in this image — unit file still written for file-based detection)"
-fi
+log "wrote systemd user unit -> $UNIT_FILE (not enabled — file creation is the detection signal)"
 
 step "shell-profile autostart persistence (ATT&CK T1546.004)"
-st_mark T1546.004 "bashrc"; act_here "append autostart line to .bashrc" "${HOME_DIR}/.bashrc"
-echo "${DECOY_SCRIPT} #${MARKER#\#}" >> "${HOME_DIR}/.bashrc"
+st_mark T1546.004 "bashrc"
+echo "${DECOY_SCRIPT} #${MARKER#\#}" | ax_here "${HOME_DIR}/.bashrc" -- tee -a "${HOME_DIR}/.bashrc" >/dev/null
 log "appended decoy autostart line to ${HOME_DIR}/.bashrc"
 
 step "Done — persistence emulation complete."

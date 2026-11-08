@@ -43,19 +43,16 @@ if [ -z "${DOCKER_HOST:-}" ]; then
     exit 1
 fi
 
-chain_stage "0/7 seed decoy artifacts (incl. K8s service-account token)" bash "$HERE/seed-decoys.sh"
+chain_stage "seed decoy artifacts (incl. K8s service-account token)" bash "$HERE/seed-decoys.sh"
 
-chain_stage "1/7 Docker-socket escape" bash "$HERE/run-docker-socket-escape.sh"
-
-chain_stage "2/7 privileged-container capability abuse" bash "$HERE/run-privileged-container-abuse.sh"
-
-chain_stage "3/7 cryptomining / resource hijacking" bash "$HERE/run-cryptomining.sh"
-
-chain_stage "4/7 image/secret discovery" bash "$HERE/run-image-secret-discovery.sh"
-
-chain_stage "5/7 workload-identity theft" bash "$HERE/run-workload-identity-theft.sh"
-
-chain_stage "6/7 impair cloud logging" bash "$HERE/run-impair-logging.sh"
+# the stages and their order come from the scenario manifest (scenarios.json)
+mapfile -t STAGES < <(python3 "$HERE/scenario-index.py" chain privileged)
+[ "${#STAGES[@]}" -gt 0 ] || { say "!! could not read the scenario manifest (scenarios.json)"; exit 1; }
+n=0
+for s in "${STAGES[@]}"; do
+    n=$((n + 1))
+    chain_stage "${n}/${#STAGES[@]} ${s#*$'\t'}" bash "$HERE/${s%%$'\t'*}"
+done
 
 say "########## PRIVILEGED CHAIN COMPLETE — session=$SESSION ##########"
 say "consolidated timeline: $LOG"

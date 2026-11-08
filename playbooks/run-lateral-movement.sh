@@ -50,9 +50,13 @@ if ! command -v sshpass >/dev/null 2>&1; then
 fi
 st_mark T1021.004 "ssh-login"
 st_sshpass "$SSH_PASS"
-act T1021.004 "ssh -p $SSH_PORT ${SSH_USER}@${INTERNAL_HOST} \"id; hostname\"" "$INTERNAL_HOST" "${SSH_USER}@${INTERNAL_HOST}:${SSH_PORT}"
-RESULT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-    "${SSH_USER}@${TARGET_IP}" "id; hostname" 2>&1)"
+# the same marker goes on the local sshpass process and, as a comment, into the
+# remote command line, so alerts on either side tie back to this action
+MARK="$(ax_marker)"; REMOTE="id; hostname"
+[ "$ACT_MARKERS" = 1 ] && REMOTE="${REMOTE} # ${MARK}"
+RESULT="$(ACT_MARK_PRESET="$MARK" ax T1021.004 "$INTERNAL_HOST" "${SSH_USER}@${INTERNAL_HOST}:${SSH_PORT}" -- \
+    "${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+    "${SSH_USER}@${TARGET_IP}" "$REMOTE" 2>&1)"
 say "ssh login attempt result:"
 echo "$RESULT" | tee -a "$LOG"
 
