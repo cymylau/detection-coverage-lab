@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/shellcheck-edited.py\"",
+            "timeout": 90,
+            "statusMessage": "ShellCheck on the edited script..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-checks.py\"",
+            "timeout": 120,
+            "statusMessage": "Running docs check and unit tests..."
+          }
+        ]
+      }
+    ]
+  }
+}
