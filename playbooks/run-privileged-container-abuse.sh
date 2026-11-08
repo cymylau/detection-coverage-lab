@@ -30,17 +30,18 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Cymylau :: privileged-container-capability-abuse emulation :: session=$SESSION"
 
 step "capability discovery (ATT&CK T1082-adjacent)"
-st_mark T1082 "capability-discovery"; act_here "capsh --print / /proc/self/status" "process capabilities"
+st_mark T1082 "capability-discovery"
 if command -v capsh >/dev/null 2>&1; then
-    capsh --print 2>&1 | tee -a "$LOG"
+    ax_here "process capabilities" -- capsh --print 2>&1 | tee -a "$LOG"
 else
-    grep -i cap /proc/self/status 2>&1 | tee -a "$LOG"
+    ax_here "process capabilities" -- grep -i cap /proc/self/status 2>&1 | tee -a "$LOG"
 fi
 
 step "attempt: nsenter into pid 1's namespaces (ATT&CK T1611)"
-st_mark T1611 "nsenter-pid1"; act_here "nsenter --target 1 --mount --uts --ipc --net --pid -- id" "pid 1 namespaces"
+st_mark T1611 "nsenter-pid1"
 if command -v nsenter >/dev/null 2>&1; then
-    nsenter --target 1 --mount --uts --ipc --net --pid -- id 2>&1 | tee -a "$LOG" \
+    # expected to fail in most setups: the attempt is the signal
+    ax_here --ok any "pid 1 namespaces" -- nsenter --target 1 --mount --uts --ipc --net --pid -- id 2>&1 | tee -a "$LOG" \
         || say "(failed as expected — no real host pid namespace is shared into this container)"
 else
     say "!! nsenter not installed — run: bash playbooks/install-container-tools.sh"
@@ -52,10 +53,10 @@ step "probe: cgroup release_agent breakout surface (ATT&CK T1611, discovery only
 # configuration, actually doing so can be a genuinely working host escape,
 # not just a detection-telemetry demo, so this script only checks and
 # reports the writability of the surface rather than exercising it.
-st_mark T1611 "release-agent-probe"; act_here "find /sys/fs/cgroup -name release_agent (discovery only)" "/sys/fs/cgroup"
+st_mark T1611 "release-agent-probe"
 CGROOT="/sys/fs/cgroup"
 if [ -d "$CGROOT" ]; then
-    find "$CGROOT" -maxdepth 2 -iname 'release_agent' 2>/dev/null | tee -a "$LOG"
+    ax_here --ok 0,1 "$CGROOT" -- find "$CGROOT" -maxdepth 2 -iname 'release_agent' 2>/dev/null | tee -a "$LOG"
     RA="$(find "$CGROOT" -maxdepth 2 -iname 'release_agent' 2>/dev/null | head -n1)"
     if [ -n "${RA:-}" ] && [ -w "$RA" ]; then
         say "!! release_agent at $RA is WRITABLE from inside this container — that is itself" \

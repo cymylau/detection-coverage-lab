@@ -28,11 +28,11 @@ step() { echo "" | tee -a "$LOG"; say "=== $* ==="; }
 say "Cymylau :: host-recon emulation :: session=$SESSION"
 
 step "whoami / id / uname -a (ATT&CK T1033, T1082)"
-st_mark T1033 "whoami-id"; act_here "whoami; id" "current user"
-whoami 2>&1 | tee -a "$LOG"
-id 2>&1 | tee -a "$LOG"
-st_mark T1082 "uname"; act_here "uname -a" "kernel/os"
-uname -a 2>&1 | tee -a "$LOG"
+st_mark T1033 "whoami-id"
+ax_here "current user" -- whoami 2>&1 | tee -a "$LOG"
+ax_here "current user" -- id 2>&1 | tee -a "$LOG"
+st_mark T1082 "uname"
+ax_here "kernel/os" -- uname -a 2>&1 | tee -a "$LOG"
 
 say "$(st_banner)"
 
@@ -46,27 +46,29 @@ if [ "$ST_TOOLING" -ge 2 ]; then
 fi
 
 step "account discovery via /etc/passwd (ATT&CK T1087.001)"
-st_mark T1087.001 "passwd"; act_here "cat /etc/passwd" "/etc/passwd"
-cat /etc/passwd 2>&1 | tee -a "$LOG"
+st_mark T1087.001 "passwd"
+ax_here /etc/passwd -- cat /etc/passwd 2>&1 | tee -a "$LOG"
 
 if [ "$ST_TOOLING" -eq 0 ]; then
     step "environment variable dump (ATT&CK T1082)"
-    st_mark T1082 "env"; act_here "env" "process environment"
-    env 2>&1 | tee -a "$LOG"
+    st_mark T1082 "env"
+    ax_here "process environment" -- env 2>&1 | tee -a "$LOG"
 fi
 
 step "SUID binary discovery (ATT&CK T1548.001)"
-st_mark T1548.001 "suid-search"; act_here "find -perm -4000" "$([ "$ST_TOOLING" -eq 0 ] && echo / || echo /usr/bin /usr/sbin /bin /sbin)"
+st_mark T1548.001 "suid-search"
+# find exits 1 when some directories are unreadable; that is normal here
 if [ "$ST_TOOLING" -eq 0 ]; then
-    find / -xdev -perm -4000 -type f 2>/dev/null | tee -a "$LOG"
+    ax_here --ok 0,1 / -- find / -xdev -perm -4000 -type f 2>/dev/null | tee -a "$LOG"
 else
-    find /usr/bin /usr/sbin /bin /sbin -xdev -perm -4000 -type f 2>/dev/null | tee -a "$LOG"   # scoped, not a whole-filesystem walk
+    ax_here --ok 0,1 "/usr/bin /usr/sbin /bin /sbin" -- find /usr/bin /usr/sbin /bin /sbin -xdev -perm -4000 -type f 2>/dev/null | tee -a "$LOG"   # scoped, not a whole-filesystem walk
 fi
 
 step "sudo permission enumeration (ATT&CK T1069.001)"
-st_mark T1069.001 "sudo-l"; act_here "sudo -l" "sudo policy"
+st_mark T1069.001 "sudo-l"
 if command -v sudo >/dev/null 2>&1; then
-    sudo -l 2>&1 | tee -a "$LOG"
+    # non-zero when the user may not run sudo: the enumeration still happened
+    ax_here --ok any "sudo policy" -- sudo -l 2>&1 | tee -a "$LOG"
 else
     say "(sudo not installed in this image — expected in most minimal containers)"
 fi

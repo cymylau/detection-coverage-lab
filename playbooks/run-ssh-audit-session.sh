@@ -67,17 +67,25 @@ step "opening one SSH session and running the audit-worthy command sequence (ATT
 st_mark T1021.004 "ssh-audit-session"
 st_sshpass "$SSH_PASS"
 DST="$INTERNAL_HOST"; TGT="${SSH_USER}@${INTERNAL_HOST}:${SSH_PORT}"
-act T1021.004 "ssh -p $SSH_PORT ${SSH_USER}@${INTERNAL_HOST} bash -s (one audited session)" "$DST" "$TGT"
-act T1033 "whoami; id; uname -a (remote)" "$DST" "$TGT"
-act T1552.001 "cat /etc/sudoers (remote)" "$DST" "/etc/sudoers"
-act T1548.003 "sudo -l (remote)" "$DST" "sudo policy"
-act T1003.008 "sudo cat /etc/shadow (remote)" "$DST" "/etc/shadow"
+# One marker for the session: on the local sshpass process and, as a comment, in
+# the remote "bash -s" command line, the parent of every command below. The
+# commands inside the session are recorded as declared steps of that action.
+MARK="$(ax_marker)"; REMOTE_CMD="bash -s"
+[ "$ACT_MARKERS" = 1 ] && REMOTE_CMD="bash -s # ${MARK}"
+# shellcheck disable=SC2034  # read by act_declared() in lib-activity.sh
+ACT_PARENT="$MARK"
+act_declared T1033 "whoami; id; uname -a (remote)" "$DST" "$TGT"
+act_declared T1552.001 "cat /etc/sudoers (remote)" "$DST" "/etc/sudoers"
+act_declared T1548.003 "sudo -l (remote)" "$DST" "sudo policy"
+act_declared T1003.008 "sudo cat /etc/shadow (remote)" "$DST" "/etc/shadow"
 # shellcheck disable=SC2088  # a label for the log, not a path to expand
-act T1552.001 "cat ~/.ssh/authorized_keys (remote)" "$DST" "~/.ssh/authorized_keys"
-act T1082 "who; last; env (remote)" "$DST" "session/environment"
-TRANSCRIPT="$("${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" \
+act_declared T1552.001 "cat ~/.ssh/authorized_keys (remote)" "$DST" "~/.ssh/authorized_keys"
+act_declared T1082 "who; last; env (remote)" "$DST" "session/environment"
+unset ACT_PARENT
+TRANSCRIPT="$(ACT_MARK_PRESET="$MARK" ax --label "ssh -p $SSH_PORT ${SSH_USER}@${INTERNAL_HOST} bash -s (one audited session)" \
+    T1021.004 "$DST" "$TGT" -- "${ST_SSHPASS[@]}" ssh -p "$SSH_PORT" \
     -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-    "${SSH_USER}@${TARGET_IP}" bash -s 2>&1 <<REMOTE_SESSION
+    "${SSH_USER}@${TARGET_IP}" "$REMOTE_CMD" 2>&1 <<REMOTE_SESSION
 echo "=== whoami / id / uname -a ==="
 whoami
 id

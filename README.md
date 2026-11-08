@@ -68,20 +68,28 @@ bash run-everything.sh
    command.
 
 **It worked if** it ends with `[run-everything] done. Results are in ./results/`,
-just after a stage summary that shows every stage as `ok`. It takes about 80
-seconds once the images are cached. If anything fails, the summary says which
-stage, the last line says `FINISHED WITH FAILURES`, and the command exits non-zero.
-The results are still handed back and reported.
+just after a stage summary that shows every stage as `ok` and a line
+`run check: ok`. It takes about 80 seconds once the images are cached. If
+anything fails, the summary or the run check says what, the last line says
+`FINISHED WITH FAILURES`, and the command exits non-zero. The results are still
+handed back and reported.
+
+Every command is recorded as it runs (its exact command line and exit status),
+so the activity table shows only what really happened. Each command also
+carries a marker, such as `cat#cdl-025a-913482101 /etc/passwd`, so an alert can
+be tied to the exact action that caused it; see
+[Action markers](docs/REFERENCE.md#action-markers).
 
 **What to look at**
 
 | File in `results/` | What it tells you |
 |---|---|
-| `activity_report.txt` | **start here**: one table of every attack action (time, technique, command, source container, destination container, path or ID, and whether the destination's own logs confirm it), then a list of every attack covered |
+| `activity_report.txt` | **start here**: one table of every attack action (time, technique, the exact command, source container, destination container, path or ID, and whether the destination's own logs confirm it or the local command ran), then a list of every attack covered |
 | `activity.csv` | the same, every row, ready for a spreadsheet or SIEM |
 | `full_chain_*.log`, `privileged_chain_*.log`, `owasp_*.log` | the detailed log of each part, with the same table at the bottom |
 | `webapp_events.jsonl` | what the vulnerable web app *really* did for each OWASP request |
-| `last_run.json` | when this run started and ended, its options, and each stage's exit code |
+| `last_run.json` | when this run started and ended, its run id and options, each stage's exit code, and the run check result |
+| `run_check.json` | any action that failed, and any mismatch between what ran and `playbooks/scenarios.json` |
 
 Then open your EDR / CDR / WAF console and compare what it flagged
 against `activity_report.txt` (all times are UTC). Any row in that table
@@ -219,8 +227,9 @@ prints its own estimate when it starts. Details are in
 
 ## Score your tool
 
-After a run, export your tool's alerts for that time window (CSV or JSON) and
-let the lab tell you what it caught:
+After a run, export your tool's alerts for that time window (CSV or JSON),
+**including the process command line and parent command line**, and let the
+lab tell you what it caught:
 
 ```bash
 python3 playbooks/detection-report.py --alerts path/to/alerts.csv \
@@ -229,11 +238,21 @@ python3 playbooks/detection-report.py --alerts path/to/alerts.csv \
 
 You get a table of every technique as detected, partial or missed, and an
 ATT&CK Navigator layer (green, amber, red) to load at
-<https://mitre-attack.github.io/attack-navigator/>. It scores the latest run only
+<https://mitre-attack.github.io/attack-navigator/>. An alert that contains an
+action's marker counts for exactly that action. Without markers in the export it
+falls back to the technique ID and time, which can be coincidence, and the report
+says which way each action was matched. Actions that failed to run are not
+scored. It scores the latest run only
 (`--all-runs` for every run). Times without a zone are read as UTC; if your
 export uses local time, add `--time-offset` (for example `--time-offset 1` for
 UTC+1). How the matching works is in
 [Scoring your tool](docs/REFERENCE.md#scoring-your-tool).
+
+Two run options help here. `--gap 180` waits 180 seconds whenever the technique
+changes, so your tool's alert grouping cannot fold one technique into another (a
+full run then takes about 2 hours; use it with `--technique` or `--only`).
+`--no-markers` runs every command without its marker, if you want to check that
+a rule also fires on the untouched command line.
 
 ## Just one technique?
 
@@ -263,6 +282,10 @@ neighbouring ones too.
   after lock-down, so the run stopped before any scenario. Run `--down` and try
   again; if it repeats, check for other containers or custom networks attached to
   the lab.
+- **`run check` lists problems:** an action exited with an unexpected status (a
+  tool missing, a service down), or a scenario did something `scenarios.json`
+  does not list. `results/run_check.json` has the list; the scenario's log says
+  why it failed.
 - **Scoring says everything was missed:** read the warnings it prints. Usually
   the export has no time field it recognises, covers a different time range, or
   is in local time (`--time-offset`).
@@ -328,7 +351,7 @@ category on the parent site. Each row is something the scripts really do and
 record in the [activity log](docs/REFERENCE.md#the-activity-log), so what
 you see in your tool can be matched against this list.
 
-- **MITRE ATT&CK**: <https://attack.mitre.org/> (33 techniques below)
+- **MITRE ATT&CK**: <https://attack.mitre.org/> (34 techniques below)
 - **OWASP Top 10:2025**: <https://owasp.org/Top10/2025/> (all 10 categories below)
 
 ### MITRE ATT&CK tests
@@ -369,7 +392,8 @@ container-escape sandbox and are not run by `--only owasp`.
 | [Collection](https://attack.mitre.org/tactics/TA0009/) | [T1119](https://attack.mitre.org/techniques/T1119/) Automated Collection | finds and copies decoy documents to a staging directory | [`collection-staging`](playbooks/run-collection-staging.sh) |
 | [Collection](https://attack.mitre.org/tactics/TA0009/) | [T1560.001](https://attack.mitre.org/techniques/T1560/001/) Archive Collected Data: Archive via Utility | base64, `tar` and `zip` of collected data | [`collection-staging`](playbooks/run-collection-staging.sh), [`metadata-exfil`](playbooks/run-metadata-exfil.sh) |
 | [Command and Control](https://attack.mitre.org/tactics/TA0011/) | [T1071.001](https://attack.mitre.org/techniques/T1071/001/) Application Layer Protocol: Web Protocols | jittered HTTP beaconing to the decoy C2 | [`c2-beacon`](playbooks/run-c2-beacon.sh) |
-| [Exfiltration](https://attack.mitre.org/tactics/TA0010/) | [T1041](https://attack.mitre.org/techniques/T1041/) Exfiltration Over C2 Channel | POSTs a staged archive to the decoy C2 (`control-api`) | [`https-exfil`](playbooks/run-https-exfil.sh) |
+| [Exfiltration](https://attack.mitre.org/tactics/TA0010/) | [T1041](https://attack.mitre.org/techniques/T1041/) Exfiltration Over C2 Channel | one plain-HTTP POST of a staged archive to the decoy C2 (`control-api:8443`, cleartext) | [`http-exfil`](playbooks/run-http-exfil.sh) |
+| [Exfiltration](https://attack.mitre.org/tactics/TA0010/) | [T1048.002](https://attack.mitre.org/techniques/T1048/002/) Exfiltration Over Asymmetric Encrypted Non-C2 Protocol | uploads a staged archive over TLS to a drop endpoint (`control-api:443`, self-signed decoy certificate) | [`https-exfil`](playbooks/run-https-exfil.sh) |
 | [Exfiltration](https://attack.mitre.org/tactics/TA0010/) | [T1048.003](https://attack.mitre.org/techniques/T1048/003/) Exfiltration Over Alternative Protocol | DNS tunnel: base64 chunks as subdomains to `dns-sink` | [`metadata-exfil`](playbooks/run-metadata-exfil.sh) |
 | [Impact](https://attack.mitre.org/tactics/TA0040/) | [T1496](https://attack.mitre.org/techniques/T1496/) Resource Hijacking | sustained CPU load plus decoy mining-pool check-ins | [`cryptomining`](playbooks/run-cryptomining.sh) |
 

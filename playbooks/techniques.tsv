@@ -4,6 +4,7 @@ T1033	System Owner/User Discovery	Discovery
 T1036.003	Masquerading: Rename System Utilities	Defense Evasion
 T1041	Exfiltration Over C2 Channel	Exfiltration
 T1046	Network Service Discovery	Discovery
+T1048.002	Exfiltration Over Alternative Protocol: Exfiltration Over Asymmetric Encrypted Non-C2 Protocol	Exfiltration
 T1048.003	Exfiltration Over Alternative Protocol	Exfiltration
 T1053.003	Scheduled Task/Job: Cron	Persistence
 T1059	Command and Scripting Interpreter	Execution

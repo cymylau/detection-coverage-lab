@@ -114,9 +114,11 @@ class DetectionReport(Tmp):
         write(self.p("a.csv"), "time,rule,mitre\n" + "2026-11-08 10:40:05,IMDS access,T1552\n" + "2026-11-08 10:46:45,Generic alert,\n")
         rc, out, err = self.report("a.csv")
         self.assertEqual(rc, 0, err)
-        self.assertEqual(self.status(out, "T1552.005"), "DETECTED")
+        # only the parent technique named, by time: not proof, so partial
+        self.assertEqual(self.status(out, "T1552.005"), "PARTIAL")
         self.assertEqual(self.status(out, "T1046"), "PARTIAL")
         self.assertEqual(self.status(out, "T1071.001"), "MISSED")
+        self.assertIn("parent tag+time 1", out)
 
     def test_json_wrapper_epoch_ms_and_layer(self):
         write_json(self.p("a.json"), {"alerts": [{"detected_at": int((T0 + 800 + 3) * 1000), "tags": ["mitre:T1071.001"]}]})
@@ -169,6 +171,99 @@ class DetectionReport(Tmp):
         self.assertIn("1 action(s)", out)
 
 
+class MarkerScoring(Tmp):
+    """Alerts tied to actions by the per-action marker on argv[0]."""
+    def setUp(self):
+        super().setUp()
+        self.acts = [
+            action(T0, "T1087.001", cmd="cat /etc/passwd", dst="ops-console", kind="exec", rc=0, ok=True, marker="cdl-ab12-1000001"),
+            action(T0 + 1, "T1082", cmd="uname -a", dst="ops-console", kind="exec", rc=0, ok=True, marker="cdl-ab12-1000002"),
+            action(T0 + 2, "T1021.004", cmd="ssh", dst="internal-host", kind="exec", rc=0, ok=True, marker="cdl-ab12-1000003"),
+            action(T0 + 2, "T1003.008", cmd="sudo cat /etc/shadow (remote)", dst="internal-host", kind="declared", parent="cdl-ab12-1000003"),
+            action(T0 + 2, "T1033", cmd="whoami (remote)", dst="internal-host", kind="declared", parent="cdl-ab12-1000003"),
+            action(T0 + 3, "T1552.001", cmd="grep -i key", dst="ops-console", kind="exec", rc=2, ok=False, marker="cdl-ab12-1000004"),
+        ]
+        write_jsonl(self.p("activity.jsonl"), self.acts)
+
+    def report(self, rows):
+        write_jsonl(self.p("a.jsonl"), rows)
+        rc, out, err = run("detection-report.py", "--alerts", self.p("a.jsonl"), "--activity", self.p("activity.jsonl"),
+                           "--csv", self.p("d.csv"))
+        self.assertEqual(rc, 0, err)
+        per = {r["technique"]: r for r in csv.DictReader(io.StringIO(read(self.p("d.csv"))))}
+        return out, err, per
+
+    def test_marker_ties_alert_to_its_action_not_its_neighbour(self):
+        # untagged alert, time right on top of uname, but its command line carries the cat's marker
+        out, _, per = self.report([{"time": "2026-11-08T10:40:01Z", "rule": "Suspicious read",
+                                     "cmdline": "cat#cdl-ab12-1000001 /etc/passwd"}])
+        self.assertEqual((per["T1087.001"]["status"], per["T1087.001"]["matched_by"]), ("detected", "marker"))
+        self.assertEqual(per["T1082"]["status"], "missed")   # the marked alert is not reused by time
+        self.assertIn("1 carry a marker from this run", out)
+
+    def test_marker_with_a_different_technique_is_partial(self):
+        _, _, per = self.report([{"time": "2026-11-08T10:40:00Z", "mitre": "T1059", "cmdline": "cat#cdl-ab12-1000001 /etc/passwd"}])
+        self.assertEqual(per["T1087.001"]["status"], "partial")
+        self.assertIn("T1059", per["T1087.001"]["matched_by"])
+
+    def test_session_marker_credits_the_step_the_alert_names(self):
+        _, _, per = self.report([{"time": "2026-11-08T10:40:02Z", "mitre": "T1003.008",
+                                   "parent_cmdline": "bash -s # cdl-ab12-1000003"}])
+        self.assertEqual((per["T1003.008"]["status"], per["T1003.008"]["matched_by"]), ("detected", "marker+tag"))
+        self.assertEqual(per["T1033"]["status"], "missed")
+
+    def test_failed_action_is_not_scored(self):
+        out, _, per = self.report([])
+        self.assertEqual(per["T1552.001"]["status"], "not-run")
+        self.assertIn("1 action(s) did not run as expected", out)
+        self.assertNotIn("T1552.001 ", out.split("=== Detection report")[1].split("techniques detected")[0])
+
+    def test_warns_when_no_alert_carries_a_marker(self):
+        _, err, _ = self.report([{"time": "2026-11-08T10:40:00Z", "mitre": "T1087.001"}])
+        self.assertIn("no alert carries a marker", err)
+
+    def test_old_runs_markers_are_ignored(self):
+        _, _, per = self.report([{"time": "2026-11-08T10:40:00Z", "cmdline": "cat#cdl-zz99-1000001 /etc/passwd"}])
+        self.assertEqual(per["T1087.001"]["matched_by"], "other alert in window")
+
+
+class ActivityLib(Tmp):
+    """The ax wrapper in lib-activity.sh records what really ran."""
+    def bash(self, script):
+        p = subprocess.run(["bash", "-c", f'source "{PB}/lib-stealth.sh" >/dev/null\n' + script],
+                           capture_output=True, text=True, env=dict(os.environ, RESULTS_DIR=self.d, CDL_RUN="t001"))
+        rows = [json.loads(l) for l in read(self.p("activity.jsonl")).splitlines()] if os.path.exists(self.p("activity.jsonl")) else []
+        return p, rows
+
+    def test_records_real_argv_rc_and_marker(self):
+        p, rows = self.bash('st_mark T1083 list\nax_here /nope -- ls "/no such dir" 2>/dev/null; echo "rc=$?"\n'
+                            'ax_here --ok 0,2 /nope -- ls /nope 2>/dev/null; true')
+        self.assertIn("rc=2", p.stdout)
+        self.assertEqual(rows[0]["argv"], "ls /no\\ such\\ dir")
+        self.assertEqual((rows[0]["rc"], rows[0]["ok"], rows[1]["ok"]), (2, False, True))
+        self.assertRegex(rows[0]["marker"], r"^cdl-t001-\d{9}$")
+        self.assertNotEqual(rows[0]["marker"], rows[1]["marker"])
+        self.assertGreaterEqual(rows[0]["end"], rows[0]["epoch"])
+
+    def test_marker_is_on_argv0_and_can_be_turned_off(self):
+        p, rows = self.bash('st_mark T1082 a\nax_here x -- bash -c \'echo "$0"\'\nACT_MARKERS=0 ax_here x -- bash -c \'echo "$0"\'')
+        first, second = p.stdout.split()
+        self.assertEqual(first, "bash#" + rows[0]["marker"])
+        self.assertEqual((second, rows[1]["marker"]), ("bash", ""))
+
+    def test_builtins_have_no_marker_and_declared_steps_carry_the_parent(self):
+        _, rows = self.bash('st_mark T1070.003 h\nax_here hist -- history -c\nm=$(ax_marker)\n'
+                            'ACT_PARENT=$m act_declared T1033 "whoami (remote)" internal-host x')
+        self.assertEqual((rows[0]["kind"], rows[0]["marker"]), ("exec", ""))
+        self.assertEqual(rows[1]["kind"], "declared")
+        self.assertRegex(rows[1]["parent"], r"^cdl-t001-")
+
+    def test_output_and_capture_behave_like_the_bare_command(self):
+        p, rows = self.bash('st_mark T1082 a\nX="$(ax_here k -- printf "%s|" a "b c")"; echo "[$X]"')
+        self.assertIn("[a|b c|]", p.stdout)
+        self.assertEqual(rows[0]["ok"], True)
+
+
 class Observe(Tmp):
     def test_yes_no_and_not_applicable(self):
         acts = [
@@ -189,6 +284,24 @@ class Observe(Tmp):
         got = {r["technique"]: r["observed"] for r in map(json.loads, read(self.p("activity_confirmed.jsonl")).splitlines())}
         self.assertEqual(got, {"T1071.001": "yes", "OWASP-A01": "NO", "T1082": "n/a", "T1033": "n/a", "T1021.004": "yes"})
         self.assertIn("2 confirmed, 1 NOT seen", out)
+
+    def test_ran_failed_declared_and_the_manifest_check(self):
+        acts = [
+            action(T0, "T1033", cmd="whoami", dst="ops-console", scenario="run-host-recon", kind="exec", rc=0, ok=True),
+            action(T0 + 1, "T1087.001", cmd="cat /etc/passwd", dst="ops-console", scenario="run-host-recon", kind="exec", rc=1, ok=False),
+            action(T0 + 2, "T1003.008", cmd="sudo cat /etc/shadow (remote)", dst="internal-host", scenario="run-host-recon", kind="declared"),
+        ]
+        write_jsonl(self.p("activity.jsonl"), acts)
+        rc, out, err = run("observe.py", "--results", self.d)
+        self.assertEqual(rc, 1, err)
+        got = [r["observed"] for r in map(json.loads, read(self.p("activity_confirmed.jsonl")).splitlines())]
+        self.assertEqual(got, ["ran", "FAILED", "declared"])
+        chk = json.loads(read(self.p("run_check.json")))
+        self.assertEqual(len(chk["failed_actions"]), 1)
+        self.assertEqual(chk["unexpected"], ["run-host-recon recorded T1003.008, which scenarios.json does not list for it"])
+        # noisy profile: the techniques host-recon lists but did not perform
+        self.assertTrue(any("T1082" in m for m in chk["missing"]))
+        self.assertIn("run check: 1 failed action(s), 1 unlisted technique(s)", out)
 
 
 class ScenarioIndex(unittest.TestCase):

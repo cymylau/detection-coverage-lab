@@ -1,0 +1,24 @@
+{
+  "_doc": "The scenario manifest: every scenario script, in run order, with the techniques it performs and what it needs first. scenario-index.py (--technique/--tactic selection), tests/check-docs.py and observe.py's run check read this file. observe.py compares it with what a run actually recorded: a technique recorded but not listed here, or listed but never performed at the noisy profile, is reported as a mismatch. needs: seed = seed-decoys.sh, bootstrap = the decoy metadata service from bootstrap.sh; chain = which chain script runs it (base: run-full-chain.sh, privileged: run-privileged-chain.sh, owasp/untrusted: run on their own); overlay = needs compose.privileged.yml; cleanup = has a --cleanup mode that run-everything.sh runs after it; conditional = techniques the noisy profile does not perform, with the reason.",
+  "scenarios": [
+    {"script": "run-host-recon", "title": "host recon", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1033", "T1069.001", "T1082", "T1087.001", "T1548.001"]},
+    {"script": "run-credential-discovery", "title": "credential discovery", "chain": "base", "needs": ["seed"], "overlay": false, "cleanup": false, "techniques": ["T1552.001", "T1552.004", "T1555.003"]},
+    {"script": "run-persistence", "title": "persistence", "chain": "base", "needs": [], "overlay": false, "cleanup": true, "techniques": ["T1053.003", "T1543.002", "T1546.004"]},
+    {"script": "run-defense-evasion", "title": "defense evasion", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1036.003", "T1070.003", "T1070.006"]},
+    {"script": "run-metadata-exfil", "title": "metadata theft + DNS exfil", "chain": "base", "needs": ["bootstrap"], "overlay": false, "cleanup": false, "techniques": ["T1046", "T1048.003", "T1552.005", "T1560.001"]},
+    {"script": "run-collection-staging", "title": "collection staging", "chain": "base", "needs": ["seed"], "overlay": false, "cleanup": false, "techniques": ["T1070.004", "T1119", "T1560.001"], "conditional": {"T1070.004": "only at artifacts level 2+ (quiet, covert)"}},
+    {"script": "run-c2-beacon", "title": "C2 beacon", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1059", "T1071.001"]},
+    {"script": "run-http-exfil", "title": "HTTP exfil (cleartext)", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1041", "T1560.001"], "conditional": {"T1560.001": "only when no staged archive exists yet"}},
+    {"script": "run-https-exfil", "title": "HTTPS exfil (TLS)", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1048.002", "T1560.001"], "conditional": {"T1560.001": "only when no staged archive exists yet"}},
+    {"script": "run-lateral-movement", "title": "lateral movement", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1021.004", "T1046"]},
+    {"script": "run-ssh-audit-session", "title": "SSH audit session", "chain": "base", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1003.008", "T1021.004", "T1033", "T1082", "T1548.003", "T1552.001"]},
+    {"script": "run-docker-socket-escape", "title": "Docker-socket escape", "chain": "privileged", "needs": [], "overlay": true, "cleanup": false, "techniques": ["T1609", "T1611"]},
+    {"script": "run-privileged-container-abuse", "title": "privileged-container capability abuse", "chain": "privileged", "needs": [], "overlay": true, "cleanup": false, "techniques": ["T1082", "T1611"]},
+    {"script": "run-cryptomining", "title": "cryptomining / resource hijacking", "chain": "privileged", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1496"]},
+    {"script": "run-image-secret-discovery", "title": "image/secret discovery", "chain": "privileged", "needs": [], "overlay": true, "cleanup": false, "techniques": ["T1552.007", "T1613"]},
+    {"script": "run-workload-identity-theft", "title": "workload-identity theft", "chain": "privileged", "needs": ["seed"], "overlay": false, "cleanup": false, "techniques": ["T1528", "T1552.007"]},
+    {"script": "run-impair-logging", "title": "impair cloud logging", "chain": "privileged", "needs": [], "overlay": false, "cleanup": false, "techniques": ["T1562.008"]},
+    {"script": "run-owasp-top10", "title": "OWASP Top 10:2025 application attacks", "chain": "owasp", "needs": [], "overlay": false, "cleanup": false, "techniques": ["OWASP-A01", "OWASP-A02", "OWASP-A03", "OWASP-A04", "OWASP-A05", "OWASP-A06", "OWASP-A07", "OWASP-A08", "OWASP-A09", "OWASP-A10"]},
+    {"script": "run-untrusted-fields", "title": "untrusted fields (paired control/marked runs)", "chain": "untrusted", "needs": [], "overlay": false, "cleanup": false, "techniques": ["UFLD-01", "UFLD-02", "UFLD-03", "UFLD-04"]}
+  ]
+}

@@ -6,8 +6,12 @@ Documentation drift check. Fails (exit 1) when the docs and the code disagree.
   python3 tests/check-docs.py --online   # also fetch every external link in the README (slow)
 
 Checks:
-  1. every ATT&CK technique the scripts record (st_mark / act calls in playbooks/run-*.sh)
-     is listed in the README "Every test in this lab" table, and nothing else is;
+  0. the scenario manifest (playbooks/scenarios.json) lists every run-*.sh scenario
+     script and nothing else, each listed technique appears in its script, and no
+     scenario records an action by hand (act / act_here): actions are recorded by
+     ax, which runs them, or act_declared for steps inside an SSH session;
+  1. every ATT&CK technique in the manifest is listed in the README "Every test in
+     this lab" table, and nothing else is;
   2. every recorded ID has a name in playbooks/techniques.tsv;
   3. the README lists all ten OWASP Top 10:2025 categories and the untrusted-field IDs
      the scenario really uses;
@@ -16,7 +20,7 @@ Checks:
   5. every local link and #anchor in README.md, SECURITY.md and docs/*.md resolves;
   6. every doc says Cymylau Ltd is a fictitious company.
 """
-import glob, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
@@ -29,12 +33,37 @@ def bad(msg):
 
 readme = open("README.md").read()
 
-# 1. techniques recorded by the scripts vs the README table
-recorded = set()
-for f in glob.glob("playbooks/run-*.sh"):
-    for line in open(f):
-        for m in re.finditer(r"(?:st_mark|\bact)\s+(T\d{4}(?:\.\d{3})?)\b", line):
-            recorded.add(m.group(1))
+# 0. the manifest vs the scripts
+manifest = json.load(open("playbooks/scenarios.json"))["scenarios"]
+CHAINS = {"run-full-chain", "run-privileged-chain", "run-all", "run-stealth-sweep"}   # orchestrators, not scenarios
+scripts = {os.path.basename(f)[:-3] for f in glob.glob("playbooks/run-*.sh")} - CHAINS
+listed = [m["script"] for m in manifest]
+for sc in sorted(scripts - set(listed)):
+    bad(f"playbooks/{sc}.sh is not in playbooks/scenarios.json")
+for sc in sorted(set(listed) - scripts):
+    bad(f"scenarios.json lists {sc}, but playbooks/{sc}.sh does not exist")
+for m in manifest:
+    path = f"playbooks/{m['script']}.sh"
+    if not os.path.exists(path):
+        continue
+    text = open(path).read()
+    for t in m["techniques"]:
+        if t.startswith("OWASP-"):
+            ok = re.search(rf"\b{t[-3:].lower()}\(\)", text)        # the a05() function
+        elif t.startswith("UFLD-"):
+            ok = t in text
+        else:
+            ok = re.search(rf"(?:st_mark|\bax|act_declared)\s+(?:--?\S+\s+(?:\"[^\"]*\"\s+|\S+\s+)?)*\"?{re.escape(t)}\b", text)
+        if not ok:
+            bad(f"scenarios.json lists {t} for {m['script']}, but the script never marks or runs it")
+for f in sorted(glob.glob("playbooks/run-*.sh")):
+    for n, line in enumerate(open(f), 1):
+        if re.match(r"\s*(?:[^#]*[;&|]\s*)?act(?:_here)?\s", line):
+            bad(f"{f}:{n}: a hand-written act/act_here record; run the command with ax instead "
+                "(or act_declared for a step inside an SSH session)")
+
+# 1. techniques in the manifest vs the README table
+recorded = {t for m in manifest for t in m["techniques"] if re.fullmatch(r"T\d{4}(?:\.\d{3})?", t)}
 in_readme = set(re.findall(r"\[(T\d{4}(?:\.\d{3})?)\]\(https://attack\.mitre\.org/techniques/", readme))
 for t in sorted(recorded - in_readme):
     bad(f"{t} is recorded by a script but missing from the README test list")
@@ -57,7 +86,7 @@ for n in range(1, 11):
         bad(f"README OWASP table is missing A{n:02d}")
     if f"OWASP-A{n:02d}" not in names:
         bad(f"OWASP-A{n:02d} has no name in techniques.tsv")
-ufld_script = set(re.findall(r"UFLD-\d\d", open("playbooks/run-untrusted-fields.sh").read()))
+ufld_script = {t for m in manifest for t in m["techniques"] if t.startswith("UFLD-")}
 ufld_readme = set(re.findall(r"UFLD-\d\d", readme))
 if ufld_script != ufld_readme:
     bad(f"untrusted-field IDs differ: scripts {sorted(ufld_script)} vs README {sorted(ufld_readme)}")
@@ -124,5 +153,5 @@ if problems:
     for p in problems:
         print("  -", p)
     sys.exit(1)
-print(f"docs check passed: {len(recorded)} techniques recorded = README list; OWASP A01-A10 present; "
+print(f"docs check passed: {len(manifest)} scenarios in scenarios.json = scripts; {len(recorded)} techniques = README list; OWASP A01-A10 present; "
       f"{len(docs)} doc files, local links ok" + (f"; {len(externals)} external links ok" if "--online" in sys.argv else ""))

@@ -40,6 +40,7 @@ services:
       - DECOY_DIR=/home/root/decoy-data
       - C2_HOST=control-api
       - C2_PORT=8443
+      - C2_TLS_PORT=443
       - INTERNAL_HOST=internal-host
       - INTERNAL_HOST_USER=decoyuser
       - INTERNAL_HOST_PASS=DECOY-NOT-REAL-PASSWORD
@@ -77,8 +78,9 @@ services:
     networks:
       - cymylau-net
 
-  # Command-and-control relay — attacker-controlled HTTP endpoint for beacon/exfil
-  # scenarios (run-c2-beacon.sh, run-https-exfil.sh). Only ever
+  # Command-and-control relay — attacker-controlled endpoint for beacon/exfil
+  # scenarios (run-c2-beacon.sh, run-http-exfil.sh on plain HTTP 8443; run-https-exfil.sh
+  # on TLS 443 with a self-signed decoy certificate made at startup). Only ever
   # hands out one hardcoded, harmless no-op "task". Internal to this environment only.
   control-api:
     image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
@@ -91,6 +93,7 @@ services:
     environment:
       - C2_BIND=0.0.0.0
       - C2_PORT=8443
+      - C2_TLS_PORT=443
       - RESULTS_DIR=/home/root/results
     networks:
       - cymylau-net

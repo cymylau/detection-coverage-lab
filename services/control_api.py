@@ -136,6 +136,14 @@ class C2Handler(BaseHTTPRequestHandler):
                 f.write(body)
             log(f"exfil POST from {self.client_address[0]}: {len(body)} bytes -> {out}")
             self._send_json({"status": "received", "bytes": len(body)})
+        elif self.path.startswith("/upload"):
+            # the HTTPS drop endpoint (TLS listener below): exfil over an encrypted, non-C2 channel
+            stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+            out = os.path.join(EXFIL_DIR, f"upload_tls_{stamp}_{next(_exfil_counter):04d}.bin")
+            with open(out, "wb") as f:
+                f.write(body)
+            log(f"TLS upload from {self.client_address[0]}: {len(body)} bytes -> {out}")
+            self._send_json({"status": "stored", "bytes": len(body)})
         elif self.path.startswith("/pool/submit"):
             log(f"mining-pool share submit from {self.client_address[0]}: {body[:200]!r}")
             self._send_json({"status": "accepted"})
@@ -156,7 +164,29 @@ class C2Handler(BaseHTTPRequestHandler):
         pass  # structured logging handled above; suppress default access log noise
 
 
+def serve_tls(port):
+    """The same decoy endpoints over TLS, for the HTTPS exfil scenario. The
+    certificate is self-signed and made fresh at startup (openssl is in the image);
+    nothing is kept outside the container."""
+    import ssl, subprocess, tempfile, threading
+    d = tempfile.mkdtemp(prefix="decoy-tls-")
+    crt, key = os.path.join(d, "decoy.crt"), os.path.join(d, "decoy.key")
+    r = subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
+                        "-subj", "/CN=control-api/O=Cymylau Ltd (fictitious) DECOY", "-addext", "subjectAltName=DNS:control-api",
+                        "-keyout", key, "-out", crt], capture_output=True)
+    if r.returncode != 0:
+        log(f"!! TLS listener disabled: openssl failed: {r.stderr[-200:]!r}")
+        return
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(crt, key)
+    tls = ThreadingHTTPServer((BIND_ADDR, port), C2Handler)
+    tls.socket = ctx.wrap_socket(tls.socket, server_side=True)
+    threading.Thread(target=tls.serve_forever, daemon=True).start()
+    log(f"control-api TLS listener on {BIND_ADDR}:{port} (self-signed decoy certificate)")
+
+
 if __name__ == "__main__":
-    log(f"control-api listening on {BIND_ADDR}:{BIND_PORT} (decoy tasking only)")
+    log(f"control-api listening on {BIND_ADDR}:{BIND_PORT} (plain HTTP, decoy tasking only)")
+    serve_tls(int(os.environ.get("C2_TLS_PORT", "443")))
     server = ThreadingHTTPServer((BIND_ADDR, BIND_PORT), C2Handler)
     server.serve_forever()
