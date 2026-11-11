@@ -299,6 +299,15 @@ one scenario at a time, stealth profile details, the activity log, the
 safety design, and what every file does. The full list of tests is the last
 section of this page: [Every test in this lab](#every-test-in-this-lab).
 
+## Recent history
+
+The last 30 days of commits on every branch, redrawn on each push to `main`
+by [pretty-git-tree](https://github.com/hmillerbakewell/pretty-git-tree)
+(workflow: `.github/workflows/git-graphic.yml`; other styles are on the
+[`git-graphic`](https://github.com/cymylau/detection-coverage-lab/tree/git-graphic) branch).
+
+![Commit graph of the last 30 days, drawn as arches](https://github.com/cymylau/detection-coverage-lab/blob/git-graphic/detection-coverage-lab-arches.png?raw=true)
+
 ## Acknowledgements
 
 Security is a team effort, and this environment stands on a lot of other
