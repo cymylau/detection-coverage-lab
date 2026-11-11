@@ -1,0 +1,17 @@
+# Lab overrides on top of Falco's own falco.yaml (loaded last from config.d).
+# Rules are left exactly as shipped (the stable falco_rules.yaml), so the result
+# measures Falco out of the box.
+engine:
+  kind: modern_ebpf
+json_output: true
+json_include_output_property: true
+json_include_output_fields_property: true
+json_include_tags_property: true
+time_format_iso_8601: true
+priority: debug
+file_output:
+  enabled: true
+  keep_alive: true
+  filename: /out/falco_events.jsonl
+stdout_output:
+  enabled: true

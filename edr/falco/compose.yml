@@ -1,0 +1,27 @@
+# Falco: open-source runtime threat detection (CNCF), used here as the EDR
+# under test. Separate compose project from the lab (-p cymylau-edr): it runs on
+# the host, not on the lab network, and watches every process on the VM through
+# the kernel (modern eBPF probe; needs a kernel with BTF, /sys/kernel/btf/vmlinux).
+#
+# Start:  mkdir -p results/edr && docker compose -p cymylau-edr -f edr/falco/compose.yml up -d
+# Stop:   docker compose -p cymylau-edr -f edr/falco/compose.yml down
+# Alerts go to results/edr/falco_events.jsonl as JSON lines; score them with
+#   python3 playbooks/detection-report.py --alerts results/edr/falco_events.jsonl
+# Needs a real VM: inside an unprivileged LXC the eBPF probe fails with
+# "ring buffer map type is not supported (errno: 1)".
+#
+# Privileged with host PID: a sensor has to see the whole host. Like the lab's
+# privileged overlay, run this only on a disposable VM.
+services:
+  falco:
+    image: falcosecurity/falco:0.45.1@sha256:69e957f91b3a6beb5c82e2afae33ec3e4479dab2d4421475d288d0cd113cedf6
+    container_name: cymylau-edr-falco
+    privileged: true
+    pid: host
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock   # container names for alerts
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./zz-lab.yaml:/etc/falco/config.d/zz-lab.yaml:ro
+      - ../../results/edr:/out
