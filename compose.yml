@@ -63,7 +63,7 @@ services:
   # Local DNS sink — the "attacker-controlled nameserver" that receives exfil.
   # Logs every query and reassembles the decoded payload into ./results.
   dns-sink:
-    image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+    image: python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
     container_name: cymylau-dns-sink
     hostname: dns-sink
     command: ["python3", "/app/dns_sink.py"]
@@ -83,7 +83,7 @@ services:
   # on TLS 443 with a self-signed decoy certificate made at startup). Only ever
   # hands out one hardcoded, harmless no-op "task". Internal to this environment only.
   control-api:
-    image: python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+    image: python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
     container_name: cymylau-control-api
     hostname: control-api
     command: ["python3", "/app/control_api.py"]
