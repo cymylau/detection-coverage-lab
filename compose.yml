@@ -128,7 +128,7 @@ services:
   # something real to show for `sudo -l` / `sudo cat /etc/shadow`, not
   # just permission-denied noise.
   internal-host:
-    image: lscr.io/linuxserver/openssh-server:latest@sha256:aa4e1b3916e8555f24e574e6108b0b89a1b20362b0a11800a71280b45999649e
+    image: lscr.io/linuxserver/openssh-server:latest@sha256:161e0b670b31d9539ca1718bc5943e981779331b4e1c9d32e8929d7652a1f22f
     container_name: cymylau-internal-host
     hostname: internal-host
     environment:
