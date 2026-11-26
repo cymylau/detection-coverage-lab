@@ -3,7 +3,7 @@
 services:
   # Attacker workstation — runs the emulation chain (nmap -> IMDS -> base64 -> DNS exfil).
   ops-console:
-    image: kalilinux/kali-rolling@sha256:7997e0581c4f5c185cfe6773d5cae8fcc7c6b79798726ccaabf843af4bcd2013
+    image: kalilinux/kali-rolling@sha256:69a9a33d98a584a537bd0f7144d20c3b6d23f3bafa9ffcf0cadf4c5f186d02ff
     container_name: cymylau-ops-console
     hostname: attacker-workstation
     # NET_ADMIN lets bootstrap.sh alias 169.254.169.254 onto loopback.
